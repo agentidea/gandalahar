@@ -2,6 +2,13 @@ from flask import Flask
 from flask.ext.restplus import Api, Resource
 from flask.ext.cors import CORS
 from query import *
+import sys
+import os.path
+here = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0,here)
+
+srcPth = os.path.dirname(__file__)+'/src'
+sys.path.append(srcPth)
 
 app = Flask(__name__)
 cors = CORS(app)
@@ -34,4 +41,4 @@ class Story(Resource):
 
 
 if __name__ == '__main__':
-    app.run(host='agentidea.com')
+    app.run(host='agentidea.com', port=7878)

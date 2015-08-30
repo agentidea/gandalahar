@@ -3,8 +3,10 @@ import os.path
 here = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0,here)
 
-srcPth = os.path.dirname(__file__)+'/src'
+srcPth = os.path.dirname(__file__) + '/src'
 sys.path.append(srcPth)
+print sys.path
+
 from src import app
 
 
