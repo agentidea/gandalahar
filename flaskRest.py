@@ -4,6 +4,10 @@ from flask.ext.cors import CORS
 from query import *
 from mailnewsparse import proc as getBreakingNews
 
+from nltk.corpus import shakespeare
+from xml.etree import ElementTree
+from midsummer import getPlayers
+
 import sys
 import os.path
 here = os.path.dirname(os.path.abspath(__file__))
@@ -15,6 +19,20 @@ sys.path.append(srcPth)
 app = Flask(__name__)
 cors = CORS(app)
 api = Api(app, version='0.1.22', title='AgentIdea API', description='REST API to various backend analytics and stores')
+
+@api.route('/midsummer')
+class Midsummer(Resource):
+    def get(self):
+	ret = None 
+	try:
+            ret=getPlayers()
+        except Exception as exp:
+            ret=exp.message
+
+        return ret
+
+    def post(self):
+	api.abort(403)
 
 
 @api.route('/model/<attribute>')
