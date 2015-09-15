@@ -1,11 +1,13 @@
 import requests
-url = 'http://localhost:7878/allegro/triple'
+
+#url = 'http://localhost:7878/allegro/triple'
+url = 'http://www.agentidea.com:80/api/allegro/triple'
 
 params = { 'repo':'scratch',
            'ns':'rdf.agentidea.com',
            'sub':'agent/GrantSteinfeld',
            'pred':'spec/#term_nick',
-           'obj':'Gandalahar',
+           'obj':'Zeus',
            'type':'STRING'}
 
 request = requests.Request('POST', url, data=params).prepare()

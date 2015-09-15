@@ -72,40 +72,130 @@ def addTripleUUUns(targetRepo, namespace,
     return afterCount-beforeCount
 
 
+
+
+def __getTypedLiteral(conn, namespace, subjectLocalName, predicateLocalName, objLiteral=None, datatype="STRING"):
+    exns = "http://%s/" % namespace
+
+    subject_ = conn.createURI(namespace=exns, localname=subjectLocalName)
+    predicate_ = conn.createURI(namespace=exns, localname=predicateLocalName)
+
+    object_ = None
+    if(objLiteral!=None):
+        object_ = conn.createLiteral(objLiteral,__getDatatype(datatype))
+
+    return subject_, predicate_, object_
+
+
 def addTripleUULns(targetRepo, namespace,
                    subjectLocalName,
                    predicateLocalName,
                    objLiteral):
     conn = getConn(targetRepo)
 
-    exns = "http://%s/" % namespace
-    subject_ = conn.createURI(namespace=exns, localname=subjectLocalName)
-    predicate_ = conn.createURI(namespace=exns, localname=predicateLocalName)
-    object_ = conn.createLiteral(objLiteral)
+    subject_, predicate_,object_ = __getTypedLiteral(conn,namespace,
+                                                     subjectLocalName,
+                                                     predicateLocalName,
+                                                     objLiteral)
 
     beforeCount = conn.size()
     conn.add(subject_, predicate_, object_)
     afterCount = conn.size()
 
     return afterCount-beforeCount
+
+
+def existsTripleUUnsTyped(targetRepo, namespace,
+                   subjectLocalName,
+                   predicateLocalName,conn=None):
+
+        if conn==None:
+            conn = getConn(targetRepo)
+
+        subject_, predicate_,object_ = __getTypedLiteral(conn,namespace,
+                                                 subjectLocalName,
+                                                 predicateLocalName)
+
+        statements = conn.getStatements(subject_,predicate_,object_)
+
+        numStatements = len(statements.string_tuples)
+        #statements.enableDuplicateFilter() ## there are no duplicates, but this exercises the code that checks
+
+        counter = 0
+        for s in statements:
+            print s
+            counter = counter + 1
+
+
+        if counter != numStatements:
+            msg = "Error counter [{}] and numstatements [{}] out of sync".format( counter, numStatements)
+            raise Exception(msg)
+
+        statements.close()
+        conn.close()
+
+        return numStatements
+
+def existsTripleUULnsTyped(targetRepo, namespace,
+                   subjectLocalName,
+                   predicateLocalName,
+                   objLiteral,conn=None, datatype="STRING"):
+
+        if conn==None:
+            conn = getConn(targetRepo)
+
+        subject_, predicate_,object_ = __getTypedLiteral(conn,namespace,
+                                                 subjectLocalName,
+                                                 predicateLocalName,
+                                                 objLiteral,datatype)
+
+        statements = conn.getStatements(subject_,predicate_,object_)
+
+        numStatements = len(statements.string_tuples)
+        #statements.enableDuplicateFilter() ## there are no duplicates, but this exercises the code that checks
+
+        counter = 0
+        for s in statements:
+            print s
+            counter = counter + 1
+
+
+        if counter != numStatements:
+            msg = "Error counter [{}] and numstatements [{}] out of sync".format( counter, numStatements)
+            raise Exception(msg)
+
+        statements.close()
+        conn.close()
+
+        return numStatements
+
+
 
 def addTripleUULnsTyped(targetRepo, namespace,
                    subjectLocalName,
                    predicateLocalName,
-                   objLiteral, datatype="INT"):
+                   objLiteral, datatype="STRING", preventDuplicates = True):
     conn = getConn(targetRepo)
-    datatype_ = __getDatatype(datatype)
+    subject_, predicate_,object_ = __getTypedLiteral(conn,namespace,
+                                                 subjectLocalName,
+                                                 predicateLocalName,
+                                                 objLiteral,datatype)
 
-    exns = "http://%s/" % namespace
-    subject_ = conn.createURI(namespace=exns, localname=subjectLocalName)
-    predicate_ = conn.createURI(namespace=exns, localname=predicateLocalName)
-    object_ = conn.createLiteral(objLiteral, datatype_)
+    finalCount = 0
 
-    beforeCount = conn.size()
-    conn.add(subject_, predicate_, object_)
-    afterCount = conn.size()
+    if(preventDuplicates):
+        print "check exists"
+        if( existsTripleUULnsTyped(targetRepo,namespace,subjectLocalName,predicateLocalName,objLiteral,conn,datatype)):
+            print "existed, no update"
+            finalCount = 1
+        else:
+            print "adding new ..."
+            beforeCount = conn.size()
+            conn.add(subject_, predicate_, object_)
+            afterCount = conn.size()
+            finalCount = afterCount-beforeCount
 
-    return afterCount-beforeCount
+    return finalCount
 
 
 def addTripleUUL(targetRepo, subjectURI, predicateURI, objLiteral):
@@ -337,9 +427,55 @@ def testD():
     addTripleBlankNode('scratch','http://rdf.agentidea.com/rel/B','boo',bnode)
     addTripleBlankNode('scratch','http://rdf.agentidea.com/rel/N','noo',bnode)
 
+
+
+def testE():
+
+    ret = existsTripleUULnsTyped('scratch',
+                     'rdf.agentidea.com',
+                     'agents/GrantSteinfeld',
+                     'spec/people/#term_age',
+                     48,datatype="INT")
+
+    print ret
+    ret = addTripleUULnsTyped('scratch',
+                         'rdf.agentidea.com',
+                         'agents/GrantSteinfeld',
+                         'spec/people/#term_age',
+                         48,datatype="INT")
+
+
+
+    print ret
+    ret = existsTripleUULnsTyped('scratch',
+                     'rdf.agentidea.com',
+                     'agents/GrantSteinfeld',
+                     'spec/people/#term_age',
+                     48,datatype="INT")
+
+    print ret
+
+def testG():
+
+    ret = existsTripleUUnsTyped('scratch',
+                     'rdf.agentidea.com',
+                     'agents/GrantSteinfeld',
+                     'spec/people/#term_age')
+    print ret
+
+def testH():
+
+    ret = addTripleUULnsTyped('scratch',
+                         'rdf.agentidea.com',
+                         'agents/GrantSteinfeld',
+                         'spec/people/#term_age',
+                         49,datatype="INT", preventDuplicates=True)
+    print ret
+
+
 if __name__ == '__main__':
 
-    testB()
+    testH()
     #SNAR()
 
 
