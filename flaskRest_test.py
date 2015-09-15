@@ -6,9 +6,8 @@ url = 'http://www.agentidea.com:80/api/allegro/triple'
 params = { 'repo':'scratch',
            'ns':'rdf.agentidea.com',
            'sub':'agent/GrantSteinfeld',
-           'pred':'spec/#term_nick',
-           'obj':'Zeus',
-           'type':'STRING'}
+           'pred':'spec/#term_knows',
+           'obj':'agent/DougFinke'}
 
 request = requests.Request('POST', url, data=params).prepare()
 

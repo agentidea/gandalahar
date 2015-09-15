@@ -26,10 +26,35 @@ humanNS = api.namespace('human', 'models')
 naturalLanguage = api.namespace('nlp', 'Natural Language Processing')
 allegroNS = api.namespace('allegro', 'triple store operations')
 
+
 @allegroNS.route('/triple')
 class Triple(Resource):
 
     def post(self):
+        '''
+        post here default spo::URI URI URI
+        '''
+        repo_ = request.form['repo']
+        namespace_ = request.form['ns']
+        subject_ = request.form['sub']
+        predicate_ = request.form['pred']
+        obj_ = request.form['obj']
+
+        ret = addTripleUUUns(repo_,
+                         namespace_,
+                         subject_,
+                         predicate_,
+                         obj_)
+
+        return ret
+
+@allegroNS.route('/tripleUUL')
+class TripleUUL(Resource):
+
+    def post(self):
+        '''
+        post here default spo::URI URI Literal
+        '''
         repo_ = request.form['repo']
         namespace_ = request.form['ns']
         subject_ = request.form['sub']

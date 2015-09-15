@@ -40,43 +40,8 @@ def getConn(repo='baroness', accessMode=Repository.OPEN):
     conn = myRepository.getConnection()
     return conn
 
-
-def addTripleUUU(targetRepo, subjectURI, predicateURI, objectURI):
-    conn = getConn(targetRepo)
-
-    subject_ = conn.createURI(subjectURI)
-    predicate_ = conn.createURI(predicateURI)
-    object_ = conn.createURI(objectURI)
-
-    beforeCount = conn.size()
-    conn.add(subject_,predicate_,object_)
-    afterCount = conn.size()
-
-    return afterCount-beforeCount
-
-def addTripleUUUns(targetRepo, namespace,
-                   subjectLocalName,
-                   predicateLocalName,
-                   objLocalName):
-    conn = getConn(targetRepo)
-
-    exns = "http://%s/" % namespace
-    subject_ = conn.createURI(namespace=exns, localname=subjectLocalName)
-    predicate_ = conn.createURI(namespace=exns, localname=predicateLocalName)
-    object_ = conn.createURI(namespace=exns, localname=objLocalName)
-
-    beforeCount = conn.size()
-    conn.add(subject_, predicate_, object_)
-    afterCount = conn.size()
-
-    return afterCount-beforeCount
-
-
-
-
 def __getTypedLiteral(conn, namespace, subjectLocalName, predicateLocalName, objLiteral=None, datatype="STRING"):
     exns = "http://%s/" % namespace
-
     subject_ = conn.createURI(namespace=exns, localname=subjectLocalName)
     predicate_ = conn.createURI(namespace=exns, localname=predicateLocalName)
 
@@ -87,19 +52,24 @@ def __getTypedLiteral(conn, namespace, subjectLocalName, predicateLocalName, obj
     return subject_, predicate_, object_
 
 
-def addTripleUULns(targetRepo, namespace,
-                   subjectLocalName,
-                   predicateLocalName,
-                   objLiteral):
+def __getUUU(conn, namespace, subjectLocalName, predicateLocalName, objectLocalName):
+    exns = "http://%s/" % namespace
+    subject_ = conn.createURI(namespace=exns, localname=subjectLocalName)
+    predicate_ = conn.createURI(namespace=exns, localname=predicateLocalName)
+    object_ = conn.createURI(namespace=exns, localname=objectLocalName)
+
+    return subject_, predicate_, object_
+
+
+def addTripleUUU(targetRepo, subjectURI, predicateURI, objectURI):
     conn = getConn(targetRepo)
 
-    subject_, predicate_,object_ = __getTypedLiteral(conn,namespace,
-                                                     subjectLocalName,
-                                                     predicateLocalName,
-                                                     objLiteral)
+    subject_ = conn.createURI(subjectURI)
+    predicate_ = conn.createURI(predicateURI)
+    object_ = conn.createURI(objectURI)
 
     beforeCount = conn.size()
-    conn.add(subject_, predicate_, object_)
+    conn.add(subject_,predicate_,object_)
     afterCount = conn.size()
 
     return afterCount-beforeCount
@@ -159,6 +129,37 @@ def existsTripleUULnsTyped(targetRepo, namespace,
             print s
             counter = counter + 1
 
+        if counter != numStatements:
+            msg = "Error counter [{}] and numstatements [{}] out of sync".format( counter, numStatements)
+            raise Exception(msg)
+
+        statements.close()
+        conn.close()
+
+        return numStatements
+
+def existsTripleUUU(targetRepo, namespace,
+                   subjectLocalName,
+                   predicateLocalName,
+                   objectLocalName,conn=None):
+
+        if conn==None:
+            conn = getConn(targetRepo)
+
+        subject_, predicate_,object_ = __getUUU(conn,namespace,
+                                                 subjectLocalName,
+                                                 predicateLocalName,
+                                                 objectLocalName)
+
+        statements = conn.getStatements(subject_, predicate_, object_)
+
+        numStatements = len(statements.string_tuples)
+        #statements.enableDuplicateFilter() ## there are no duplicates, but this exercises the code that checks
+
+        counter = 0
+        for s in statements:
+            print s
+            counter = counter + 1
 
         if counter != numStatements:
             msg = "Error counter [{}] and numstatements [{}] out of sync".format( counter, numStatements)
@@ -168,6 +169,34 @@ def existsTripleUULnsTyped(targetRepo, namespace,
         conn.close()
 
         return numStatements
+
+def addTripleUUUns(targetRepo, namespace,
+                   subjectLocalName,
+                   predicateLocalName,
+                   objectLocalName, preventDuplicates = True):
+    conn = getConn(targetRepo)
+
+    subject_, predicate_,object_ = __getUUU(conn,namespace,
+                                                 subjectLocalName,
+                                                 predicateLocalName,
+                                                 objectLocalName)
+    numberAdded = 0
+
+    if(preventDuplicates):
+        if(existsTripleUUU(targetRepo,namespace,subjectLocalName,predicateLocalName,objectLocalName,conn)):
+            print "exists, ignoring save"
+            numberAdded = 0
+        else:
+            beforeCount = conn.size()
+            conn.add(subject_, predicate_, object_)
+            afterCount = conn.size()
+            numberAdded = afterCount-beforeCount
+    else:
+        print "grok why allowing duplicate UUU triples is a good idea????"
+    return numberAdded
+
+
+
 
 
 
@@ -181,21 +210,22 @@ def addTripleUULnsTyped(targetRepo, namespace,
                                                  predicateLocalName,
                                                  objLiteral,datatype)
 
-    finalCount = 0
+    numberAdded = 0
 
     if(preventDuplicates):
         print "check exists"
         if( existsTripleUULnsTyped(targetRepo,namespace,subjectLocalName,predicateLocalName,objLiteral,conn,datatype)):
             print "existed, no update"
-            finalCount = 1
+            numberAdded = 1
         else:
             print "adding new ..."
             beforeCount = conn.size()
             conn.add(subject_, predicate_, object_)
             afterCount = conn.size()
-            finalCount = afterCount-beforeCount
-
-    return finalCount
+            numberAdded = afterCount-beforeCount
+    else:
+        print "must still grok why dups should be allowed???"
+    return numberAdded
 
 
 def addTripleUUL(targetRepo, subjectURI, predicateURI, objLiteral):
@@ -472,10 +502,20 @@ def testH():
                          49,datatype="INT", preventDuplicates=True)
     print ret
 
+def testI():
+
+    ret = addTripleUUUns('scratch','rdf.agentidea.com','agents/GrantSteinfeld',
+                         'spec/people/#term_barelyknows','agents/PaulSteinfeld')
+
+    print ret
+
+
+
+
 
 if __name__ == '__main__':
 
-    testH()
+    testI()
     #SNAR()
 
 
