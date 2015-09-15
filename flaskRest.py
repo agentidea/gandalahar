@@ -10,6 +10,10 @@ from midsummer import getPlayers
 
 import sys
 import os.path
+import logging
+logger = logging.getLogger()
+logger.setLevel("DEBUG")
+
 
 here = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, here)
@@ -41,17 +45,22 @@ class Triple(Resource):
         '''
         post here default spo::URI URI URI
         '''
-        repo_ = request.form['repo']
-        namespace_ = request.form['ns']
-        subject_ = request.form['sub']
-        predicate_ = request.form['pred']
-        obj_ = request.form['obj']
+        ret = 'not_set_yet'
+        try:
+            repo_ = request.form['repo']
+            namespace_ = request.form['ns']
+            subject_ = request.form['sub']
+            predicate_ = request.form['pred']
+            obj_ = request.form['obj']
 
-        ret = addTripleUUUns(repo_,
-                         namespace_,
-                         subject_,
-                         predicate_,
-                         obj_)
+            ret = addTripleUUUns(repo_,
+                             namespace_,
+                             subject_,
+                             predicate_,
+                             obj_)
+
+        except Exception as genex:
+            ret = "ERROR: %s" % genex
 
         return ret
 
