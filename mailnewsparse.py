@@ -55,7 +55,10 @@ def get_email(id, server):
             print parsedMonth
 
             if (today.day == int(day) and today.month == parsedMonth and today.year == int(year)):
-                print 'match %s' % subject
+                
+                if (subject[0:9]=='My Alerts'):
+                    return None
+
                 return {'date': msg['date'], 'src': from_.split('<')[0].replace('"', '').strip(),
                         'subject': subject.strip()}
             else:
