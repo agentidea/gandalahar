@@ -28,6 +28,7 @@ allegroNS = api.namespace('allegro', 'triple store operations')
 
 
 @allegroNS.route('/triples/<repo>')
+@api.doc(params={'repo':'repository name'})
 class Triples(Resource):
     def get(self, repo):
         return getTriples(repo)
