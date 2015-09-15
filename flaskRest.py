@@ -1,4 +1,4 @@
-from flask import Flask
+from flask import Flask, request
 from flask.ext.restplus import Api, Resource
 from flask.ext.cors import CORS
 from query import *
@@ -28,14 +28,24 @@ allegroNS = api.namespace('allegro', 'triple store operations')
 
 @allegroNS.route('/triple')
 class Triple(Resource):
-    def get(self):
-        return {'s':'sub','p':'pred','o':'obj'}
 
     def post(self):
-        return "save to triplestore"
+        repo_ = request.form['repo']
+        namespace_ = request.form['ns']
+        subject_ = request.form['sub']
+        predicate_ = request.form['pred']
+        obj_ = request.form['obj']
+        type_ = request.form['type']
 
-    def delete(self):
-        return "delete triple"
+        ret = addTripleUULnsTyped(repo_,
+                         namespace_,
+                         subject_,
+                         predicate_,
+                         obj_,
+                         type_)
+
+        return ret
+
 
 
 

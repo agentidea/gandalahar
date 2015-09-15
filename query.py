@@ -1,6 +1,8 @@
 from franz.openrdf.sail.allegrographserver import AllegroGraphServer
 from franz.openrdf.repository.repository import Repository
 from franz.openrdf.query.query import QueryLanguage
+from franz.openrdf.vocabulary.xmlschema import XMLSchema
+from franz.openrdf.rio.rdfformat import RDFFormat
 import os
 
 CURRENT_DIRECTORY = os.getcwd() 
@@ -11,7 +13,23 @@ AG_CATALOG = ''
 AG_USER = 'allegroadmin'
 AG_PASSWORD = 'kingfisher'
 
+def __getDatatype(stringType):
+    if stringType.upper() == "INT":
+        return XMLSchema.INT
+    if stringType.upper() == "LONG":
+        return XMLSchema.LONG
+    if stringType.upper() == "DOUBLE":
+        return XMLSchema.DOUBLE
+    if stringType.upper() == "DECIMAL":
+        return XMLSchema.DECIMAL
+    if stringType.upper() == "FLOAT":
+        return XMLSchema.FLOAT
+    if stringType.upper() == "STRING":
+        return XMLSchema.STRING
+    if stringType.upper() == "BOOLEAN":
+        return XMLSchema.BOOLEAN
 
+    raise Exception("Unhandled Type %s" % stringType)
 
 def getConn(repo='baroness', accessMode=Repository.OPEN):
 
@@ -21,6 +39,110 @@ def getConn(repo='baroness', accessMode=Repository.OPEN):
     myRepository.initialize()
     conn = myRepository.getConnection()
     return conn
+
+
+def addTripleUUU(targetRepo, subjectURI, predicateURI, objectURI):
+    conn = getConn(targetRepo)
+
+    subject_ = conn.createURI(subjectURI)
+    predicate_ = conn.createURI(predicateURI)
+    object_ = conn.createURI(objectURI)
+
+    beforeCount = conn.size()
+    conn.add(subject_,predicate_,object_)
+    afterCount = conn.size()
+
+    return afterCount-beforeCount
+
+def addTripleUUUns(targetRepo, namespace,
+                   subjectLocalName,
+                   predicateLocalName,
+                   objLocalName):
+    conn = getConn(targetRepo)
+
+    exns = "http://%s/" % namespace
+    subject_ = conn.createURI(namespace=exns, localname=subjectLocalName)
+    predicate_ = conn.createURI(namespace=exns, localname=predicateLocalName)
+    object_ = conn.createURI(namespace=exns, localname=objLocalName)
+
+    beforeCount = conn.size()
+    conn.add(subject_, predicate_, object_)
+    afterCount = conn.size()
+
+    return afterCount-beforeCount
+
+
+def addTripleUULns(targetRepo, namespace,
+                   subjectLocalName,
+                   predicateLocalName,
+                   objLiteral):
+    conn = getConn(targetRepo)
+
+    exns = "http://%s/" % namespace
+    subject_ = conn.createURI(namespace=exns, localname=subjectLocalName)
+    predicate_ = conn.createURI(namespace=exns, localname=predicateLocalName)
+    object_ = conn.createLiteral(objLiteral)
+
+    beforeCount = conn.size()
+    conn.add(subject_, predicate_, object_)
+    afterCount = conn.size()
+
+    return afterCount-beforeCount
+
+def addTripleUULnsTyped(targetRepo, namespace,
+                   subjectLocalName,
+                   predicateLocalName,
+                   objLiteral, datatype="INT"):
+    conn = getConn(targetRepo)
+    datatype_ = __getDatatype(datatype)
+
+    exns = "http://%s/" % namespace
+    subject_ = conn.createURI(namespace=exns, localname=subjectLocalName)
+    predicate_ = conn.createURI(namespace=exns, localname=predicateLocalName)
+    object_ = conn.createLiteral(objLiteral, datatype_)
+
+    beforeCount = conn.size()
+    conn.add(subject_, predicate_, object_)
+    afterCount = conn.size()
+
+    return afterCount-beforeCount
+
+
+def addTripleUUL(targetRepo, subjectURI, predicateURI, objLiteral):
+    conn = getConn(targetRepo)
+
+    subject_ = conn.createURI(subjectURI)
+    predicate_ = conn.createURI(predicateURI)
+    object_ = conn.createLiteral(objLiteral)
+
+    beforeCount = conn.size()
+    conn.add(subject_,predicate_,object_)
+    afterCount = conn.size()
+
+    return afterCount-beforeCount
+
+
+
+def addTripleTypedObj(targetRepo, subjectURI, predicateURI, objLiteral, datatype="INT"):
+    conn = getConn(targetRepo)
+    datatype_ = __getDatatype(datatype)
+
+    subject_ = conn.createURI(subjectURI)
+    predicate_ = conn.createURI(predicateURI)
+    object_ = conn.createLiteral(objLiteral, datatype_)
+
+    beforeCount = conn.size()
+    conn.add(subject_,predicate_,object_)
+    afterCount = conn.size()
+
+    return afterCount-beforeCount
+
+
+
+
+def loadRDF(targetRepo, path1 = "./rdfUpload/python-lesmis.rdf" ):
+    conn = getConn(targetRepo)
+    conn.addFile(path1, None, format=RDFFormat.RDFXML);
 
 
 def queryModel(anonKey, predicateSuffix='EyeColor'):
@@ -47,6 +169,9 @@ def queryModel(anonKey, predicateSuffix='EyeColor'):
        counter = counter + 1
 
     return rez
+
+
+
 
 def	getAttribute(predicateSuffix='EyeColor'):
     conn = getConn()
@@ -129,11 +254,98 @@ def getAttributes():
 
 
 
-#if __name__ == '__main__':
 
-    #print getAttribute()
-    #print getAttribute('HairColor')
-    #print getAttributes()
+
+
+def testA():
+
+    ret = addTripleUUU("scratch", "http://rdf.agentidea.com/name/GrantSteinfeld",
+                       "http://http://xmlns.com/foaf/spec/#term_knows",
+                       "http://rdf.agentidea.com/name/LouiseSteinfeld")
+
+    print ret
+
+
+    ret = addTripleUUL("scratch", "http://rdf.agentidea.com/name/GrantSteinfeld",
+                       "http://http://xmlns.com/foaf/spec/#term_knows",
+                       "LouiseSteinfeld")
+
+    print ret
+
+    ret = addTripleTypedObj("scratch", "http://rdf.agentidea.com/name/GrantSteinfeld",
+                       "http://xmlns.com/foaf/spec/#term_age",
+                       42)
+
+    print ret
+
+    ret = addTripleTypedObj("scratch", "http://rdf.agentidea.com/name/GrantSteinfeld",
+                       "http://xmlns.com/foaf/spec/#term_status",
+                       "Ebullient and Pensive","string")
+
+    print ret
+
+def testB():
+    ret = addTripleUULns('scratch',
+                         'rdf.agentidea.com',
+                         'agents/GrantSteinfeld',
+                         'spec/people/#term_nick',
+                         'Thor')
+
+    print ret
+    ret = addTripleUULns('scratch',
+                         'rdf.agentidea.com',
+                         'agents/GrantSteinfeld',
+                         'spec/people/#term_foaf',
+                         'agents/RhadaPuppy')
+
+    print ret
+    ret = addTripleUULns('scratch',
+                         'rdf.agentidea.com',
+                         'agents/RhadaPuppy',
+                         'spec/people/#term_foaf',
+                         'agents/GrantSteinfeld')
+    print ret
+    ret = addTripleUULns('scratch',
+                         'rdf.agentidea.com',
+                         'agents/RhadaPuppy',
+                         'spec/people/#term_nick',
+                         'Snorf')
+
+
+
+    print ret
+    ret = addTripleUULnsTyped('scratch',
+                         'rdf.agentidea.com',
+                         'agents/RhadaPuppy',
+                         'spec/people/#term_age',
+                         15,"INT")
+
+    print ret
+
+    ret = addTripleUULnsTyped('scratch',
+                         'rdf.agentidea.com',
+                         'agents/GrantSteinfeld',
+                         'spec/people/#term_age',
+                         48,"INT")
+
+    print ret
+
+
+
+def testD():
+    bnode = addTripleBlankNode('scratch','http://rdf.agentidea.com/rel/A','foo','NumeroDuo')
+    addTripleBlankNode('scratch','http://rdf.agentidea.com/rel/B','boo',bnode)
+    addTripleBlankNode('scratch','http://rdf.agentidea.com/rel/N','noo',bnode)
+
+if __name__ == '__main__':
+
+    testB()
+    #SNAR()
+
+
+    # print getAttribute()
+    # print getAttribute('HairColor')
+    # print getAttributes()
     # rez = queryModel('bEBDD1E92x88', 'HairColor')
     # for r in rez:
     #     print r
