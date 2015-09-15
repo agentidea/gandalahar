@@ -27,6 +27,12 @@ naturalLanguage = api.namespace('nlp', 'Natural Language Processing')
 allegroNS = api.namespace('allegro', 'triple store operations')
 
 
+@allegroNS.route('/triples/<repo>')
+class Triples(Resource):
+    def get(self, repo):
+        return getTriples(repo)
+
+
 @allegroNS.route('/triple')
 class Triple(Resource):
 

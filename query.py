@@ -265,6 +265,27 @@ def loadRDF(targetRepo, path1 = "./rdfUpload/python-lesmis.rdf" ):
     conn.addFile(path1, None, format=RDFFormat.RDFXML);
 
 
+def getTriples(targetRepo):
+    conn = getConn(targetRepo)
+    rez = []
+    try:
+        queryString = "SELECT ?s ?p ?o  WHERE {?s ?p ?o .}"
+        tupleQuery = conn.prepareTupleQuery(QueryLanguage.SPARQL, queryString)
+        result = tupleQuery.evaluate();
+        try:
+            for bindingSet in result:
+                s = bindingSet.getValue("s")
+                p = bindingSet.getValue("p")
+                o = bindingSet.getValue("o")
+                rez.append([s.getValue(), p.getValue(), o.getValue()])
+        finally:
+            result.close()
+    finally:
+        conn.close();
+        return rez
+
+
+
 def queryModel(anonKey, predicateSuffix='EyeColor'):
     conn = getConn()
     queryString = """
@@ -515,9 +536,9 @@ def testI():
 
 if __name__ == '__main__':
 
-    testI()
+    #testI()
     #SNAR()
-
+    print getTriples('scratch')
 
     # print getAttribute()
     # print getAttribute('HairColor')
