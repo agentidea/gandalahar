@@ -8,9 +8,6 @@ from midsummer import getPlayers
 import sys
 import os.path
 from datetime import datetime
-import logging
-logger = logging.getLogger()
-logger.setLevel("DEBUG")
 
 
 here = os.path.dirname(os.path.abspath(__file__))
