@@ -5,7 +5,7 @@ params = { 'repo':'doug',
            'ns':'rdf.agentidea.com',
            'sub':'agent/DougFinke',
            'pred':'spec/#term_knows',
-           'obj':'agent/JamesBond'}
+           'obj':'agent/MarkBurgess'}
 
 request = requests.Request('POST', url, data=params).prepare()
 with requests.Session() as s:

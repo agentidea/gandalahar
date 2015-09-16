@@ -31,6 +31,22 @@ naturalLanguage = api.namespace('nlp', 'Natural Language Processing')
 allegroNS = api.namespace('allegro', 'triple store operations')
 
 
+
+
+
+api.route('/pingpost')
+class Pingpost(Resource):
+    def post(self):
+        '''
+        post test
+        '''
+        print request
+        param1 = request.form['param1']
+        param2 = request.form['param1']
+        return [param1,param2]
+
+
+
 @allegroNS.route('/triples/<repo>')
 @api.doc(params={'repo':'repository name'})
 class Triples(Resource):
