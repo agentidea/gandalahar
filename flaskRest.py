@@ -21,7 +21,7 @@ sys.path.append(srcPth)
 
 app = Flask(__name__)
 cors = CORS(app)
-api = Api(app, version='0.1.23', title='AgentIdea API', description='REST API to various backend analytics and stores')
+api = Api(app, version='0.1.24', title='AgentIdea API', description='REST API to various backend analytics and stores')
 
 newsNS = api.namespace('news', 'news')
 humanNS = api.namespace('human', 'models')
@@ -32,7 +32,8 @@ debugNS = api.namespace('debug', 'debugging calls')
 
 
 
-debugNS.route('/pingpost')
+@debugNS.route('/pingpost')
+@api.doc(params={'param1':'some value 1', 'param2':'some value 2'})
 class Pingpost(Resource):
     def post(self):
         '''
