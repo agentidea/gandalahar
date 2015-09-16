@@ -3,13 +3,11 @@ from flask.ext.restplus import Api, Resource
 from flask.ext.cors import CORS
 from query import *
 from mailnewsparse import proc as getBreakingNews
-
-from nltk.corpus import shakespeare
-from xml.etree import ElementTree
 from midsummer import getPlayers
 
 import sys
 import os.path
+from datetime import datetime
 import logging
 logger = logging.getLogger()
 logger.setLevel("DEBUG")
@@ -29,21 +27,22 @@ newsNS = api.namespace('news', 'news')
 humanNS = api.namespace('human', 'models')
 naturalLanguage = api.namespace('nlp', 'Natural Language Processing')
 allegroNS = api.namespace('allegro', 'triple store operations')
+debugNS = api.namespace('debug', 'debugging calls')
 
 
 
 
-
-api.route('/pingpost')
+debugNS.route('/pingpost')
 class Pingpost(Resource):
     def post(self):
         '''
-        post test
+        post test responds with what was passed up
         '''
         print request
         param1 = request.form['param1']
         param2 = request.form['param1']
-        return [param1,param2]
+        d = datetime.now()
+        return [param1,param2,d]
 
 
 
