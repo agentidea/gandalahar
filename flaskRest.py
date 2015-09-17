@@ -1,4 +1,4 @@
-from flask import Flask, request
+from flask import Flask, request, Response
 from flask.ext.restplus import Api, Resource
 from flask.ext.cors import CORS
 from query import *
@@ -8,7 +8,7 @@ from midsummer import getPlayers
 import sys
 import os.path
 from datetime import datetime
-
+import pprint
 
 here = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, here)
@@ -24,13 +24,19 @@ newsNS = api.namespace('news', 'news')
 humanNS = api.namespace('human', 'models')
 naturalLanguage = api.namespace('nlp', 'Natural Language Processing')
 allegroNS = api.namespace('allegro', 'triple store operations')
-debugNS = api.namespace('debug', 'debugging calls')
+debugNS = api.namespace('dbg', 'debugging calls')
 
 
 
+@debugNS.route("/vars")
+class Vars(Resource):
+    def get():
+        print "GETTING"
+        str_ = pprint.pformat(request.environ, depth=5)
+        print str_
+        return Response(str_, mimetype="text/text")
 
 @debugNS.route('/pingpost')
-@api.doc(params={'param1':'some value 1', 'param2':'some value 2'})
 class Pingpost(Resource):
     def post(self):
         '''
@@ -38,9 +44,8 @@ class Pingpost(Resource):
         '''
         print request
         param1 = request.form['param1']
-        param2 = request.form['param1']
         d = datetime.now()
-        return [param1,param2,d]
+        return [param1,str(d)]
 
 
 
