@@ -1,5 +1,5 @@
 from flask import Flask, request, Response
-from flask.ext.restplus import Api, Resource
+from flask.ext.restplus import Api, Resource, fields
 from flask.ext.cors import CORS
 from query import *
 from mailnewsparse import proc as getBreakingNews
@@ -36,16 +36,35 @@ class Vars(Resource):
         print str_
         return Response(str_, mimetype="text/text")
 
+
+#define the payload for pingpost
+ping_post = api.model('PingPostResource', {
+    'param1': fields.String,
+    'param2': fields.Float
+})
+
 @debugNS.route('/pingpost')
 class Pingpost(Resource):
+
+    @api.expect(ping_post)
     def post(self):
         '''
         post test responds with what was passed up
         '''
-        print request
-        param1 = request.form['param1']
-        d = datetime.now()
-        return [param1,str(d)]
+        try:
+            json_ = request.get_json()
+
+            if 'param1' in json_ and 'param2' in json_:
+                param1 = json_['param1']
+                param2 = json_['param2']
+
+
+                return [param1, param2, str(datetime.now())]
+            else:
+                raise Exception( "param1 and param2 are required")
+        except Exception as genex:
+            api.abort(500,genex.message)
+
 
 
 
@@ -78,9 +97,10 @@ class Triple(Resource):
                              obj_)
 
         except Exception as genex:
-            ret = "ERROR: %s" % genex
+            api.abort(500, "ERROR: %s" % genex)
 
         return ret
+
 
 @allegroNS.route('/tripleUUL')
 class TripleUUL(Resource):
@@ -89,19 +109,24 @@ class TripleUUL(Resource):
         '''
         post here default spo::URI URI Literal
         '''
-        repo_ = request.form['repo']
-        namespace_ = request.form['ns']
-        subject_ = request.form['sub']
-        predicate_ = request.form['pred']
-        obj_ = request.form['obj']
-        type_ = request.form['type']
 
-        ret = addTripleUULnsTyped(repo_,
+        ret = 'not_set_yet'
+        try:
+            repo_ = request.form['repo']
+            namespace_ = request.form['ns']
+            subject_ = request.form['sub']
+            predicate_ = request.form['pred']
+            obj_ = request.form['obj']
+            type_ = request.form['type']
+            ret = addTripleUULnsTyped(repo_,
                          namespace_,
                          subject_,
                          predicate_,
                          obj_,
                          type_)
+
+        except Exception as genex:
+            api.abort(500, "ERROR: %s" % genex)
 
         return ret
 
@@ -157,4 +182,5 @@ class BreakingNews(Resource):
 
 
 if __name__ == '__main__':
-    app.run(host='localhost', port=7878)
+    #app.run(host='localhost', port=7878, debug=True)
+    app.run(host='www.agentidea.com', port=7878)

@@ -1,8 +1,7 @@
 import requests
-url= 'http://www.agentidea.com:80/api/debug/pingpost'
+url= 'http://localhost:7878/dbg/pingpost'
 
-params = { 'param1':'Rhada',
-           'param2':'Puppy'}
+params = { 'param1':'Rhada' }
 
 request = requests.Request('POST', url, data=params).prepare()
 with requests.Session() as s:
