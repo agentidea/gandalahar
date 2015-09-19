@@ -51,6 +51,24 @@ def __getTypedLiteral(conn, namespace, subjectLocalName, predicateLocalName, obj
 
     return subject_, predicate_, object_
 
+def __getLUL(conn, namespace, subjectLocalName, predicateLocalName,
+             objLiteral=None, datatype="STRING"):
+    exns = "http://%s/" % namespace
+    subject_ = conn.createLiteral(subjectLocalName,__getDatatype("STRING"))
+    predicate_ = conn.createURI(namespace=exns, localname=predicateLocalName)
+
+    object_ = None
+    if(objLiteral!=None):
+        object_ = conn.createLiteral(objLiteral,__getDatatype(datatype))
+
+    return subject_, predicate_, object_
+def __getLUU(conn, namespace, subjectLocalName, predicateLocalName, objectLocalName):
+    exns = "http://%s/" % namespace
+    subject_ = conn.createLiteral(subjectLocalName,__getDatatype("STRING"))
+    predicate_ = conn.createURI(namespace=exns, localname=predicateLocalName)
+    object_ = conn.createURI(objectLocalName)
+
+    return subject_, predicate_, object_
 
 def __getUUU(conn, namespace, subjectLocalName, predicateLocalName, objectLocalName):
     exns = "http://%s/" % namespace
@@ -197,7 +215,40 @@ def addTripleUUUns(targetRepo, namespace,
 
 
 
+def addTripleLULnsTyped(targetRepo, namespace,
+                   subjectLocalName,
+                   predicateLocalName,
+                   objLiteral, datatype="STRING", preventDuplicates = True):
+    conn = getConn(targetRepo)
+    subject_, predicate_,object_ = __getLUL(conn,namespace,
+                                                 subjectLocalName,
+                                                 predicateLocalName,
+                                                 objLiteral,datatype)
 
+    numberAdded = 0
+
+
+    beforeCount = conn.size()
+    conn.add(subject_, predicate_, object_)
+    afterCount = conn.size()
+    numberAdded = afterCount-beforeCount
+
+    return numberAdded
+
+def addTripleLUUns(targetRepo, namespace,
+                   subjectLocalName,
+                   predicateLocalName,
+                   objLiteral,  preventDuplicates = True):
+    conn = getConn(targetRepo)
+    subject_, predicate_,object_ = __getLUU(conn,namespace,
+                                                 subjectLocalName,
+                                                 predicateLocalName,
+                                                 objLiteral)
+
+    conn.add(subject_, predicate_, object_)
+    afterCount = conn.size()
+
+    return afterCount
 
 
 def addTripleUULnsTyped(targetRepo, namespace,
@@ -530,15 +581,27 @@ def testI():
 
     print ret
 
+def testJ():
 
+    ret = addTripleLUUns('scratch','rdf.agentidea.com','xyzABC',
+                         'spec/people/#term_src','http://www.agentidea.com')
 
+    print ret
+
+    ret = addTripleLULnsTyped('scratch','rdf.agentidea.com','xyzABC',
+                         'spec/people/#term_title','ghandilahar',"string")
+
+    print ret
 
 
 if __name__ == '__main__':
 
-    #testI()
+
+
+
+    testJ()
     #SNAR()
-    print getTriples('scratch')
+    #print getTriples('scratch')
 
     # print getAttribute()
     # print getAttribute('HairColor')

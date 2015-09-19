@@ -1,7 +1,7 @@
 import requests
 url = 'http://www.agentidea.com/api/allegro/triple'
 
-params = { 'repo':'doug',
+params = { 'repo':'scratch',
            'ns':'rdf.agentidea.com',
            'sub':'agent/DougFinke',
            'pred':'spec/#term_knows',

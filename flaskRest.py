@@ -101,6 +101,31 @@ class Triple(Resource):
 
         return ret
 
+@allegroNS.route('/tripleLUU')
+class TripleLUU(Resource):
+
+    def post(self):
+        '''
+        post here default spo::Literal URI URI
+        '''
+        ret = 'not_set_yet'
+        try:
+            repo_ = request.form['repo']
+            namespace_ = request.form['ns']
+            subject_ = request.form['sub']
+            predicate_ = request.form['pred']
+            obj_ = request.form['obj']
+
+            ret = addTripleLUUns(repo_,
+                             namespace_,
+                             subject_,
+                             predicate_,
+                             obj_)
+
+        except Exception as genex:
+            api.abort(500, "ERROR: %s" % genex)
+
+        return ret
 
 @allegroNS.route('/tripleUUL')
 class TripleUUL(Resource):
@@ -130,7 +155,33 @@ class TripleUUL(Resource):
 
         return ret
 
+@allegroNS.route('/tripleLUL')
+class TripleLUL(Resource):
 
+    def post(self):
+        '''
+        post here default spo::Literal URI Literal
+        '''
+
+        ret = 'not_set_yet'
+        try:
+            repo_ = request.form['repo']
+            namespace_ = request.form['ns']
+            subject_ = request.form['sub']
+            predicate_ = request.form['pred']
+            obj_ = request.form['obj']
+            type_ = request.form['type']
+            ret = addTripleLULnsTyped(repo_,
+                         namespace_,
+                         subject_,
+                         predicate_,
+                         obj_,
+                         type_)
+
+        except Exception as genex:
+            api.abort(500, "ERROR: %s" % genex)
+
+        return ret
 
 
 @naturalLanguage.route('/midsummer')
