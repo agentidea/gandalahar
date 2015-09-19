@@ -116,6 +116,8 @@ class TripleLUU(Resource):
             predicate_ = request.form['pred']
             obj_ = request.form['obj']
 
+            print obj_
+
             ret = addTripleLUUns(repo_,
                              namespace_,
                              subject_,

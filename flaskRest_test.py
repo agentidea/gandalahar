@@ -1,11 +1,11 @@
 import requests
-url = 'http://www.agentidea.com/api/allegro/triple'
+url = 'http://www.agentidea.com/api/allegro/tripleLUU'
 
 params = { 'repo':'scratch',
            'ns':'rdf.agentidea.com',
-           'sub':'agent/DougFinke',
-           'pred':'spec/#term_knows',
-           'obj':'agent/BatMan'}
+           'sub':'xyz',
+           'pred':'spec/#term_src',
+           'obj':'http://finked.com/home/new.aspx'}
 
 
 request = requests.Request('POST', url, data=params).prepare()  # data could be json

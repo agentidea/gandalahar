@@ -588,8 +588,8 @@ def testJ():
 
     print ret
 
-    ret = addTripleLULnsTyped('scratch','rdf.agentidea.com','xyzABC',
-                         'spec/people/#term_title','ghandilahar',"string")
+    #ret = addTripleLULnsTyped('scratch','rdf.agentidea.com','xyzABC',
+    #                   'spec/people/#term_title','ghandilahar',"string")
 
     print ret
 
