@@ -156,6 +156,39 @@ def existsTripleUULnsTyped(targetRepo, namespace,
 
         return numStatements
 
+def existsTripleLULnsTyped(targetRepo, namespace,
+                   subjectLiteral,
+                   predicateLocalName,
+                   objLiteral,conn=None, datatype="STRING"):
+
+        if conn==None:
+            conn = getConn(targetRepo)
+
+        subject_, predicate_,object_ = __getLUL(conn,namespace,
+                                                 subjectLiteral,
+                                                 predicateLocalName,
+                                                 objLiteral,datatype)
+
+        statements = conn.getStatements(subject_,predicate_,object_)
+
+        numStatements = len(statements.string_tuples)
+        #statements.enableDuplicateFilter() ## there are no duplicates, but this exercises the code that checks
+
+        counter = 0
+        for s in statements:
+            print s
+            counter = counter + 1
+
+        if counter != numStatements:
+            msg = "Error counter [{}] and numstatements [{}] out of sync".format( counter, numStatements)
+            raise Exception(msg)
+
+        statements.close()
+        conn.close()
+
+        return numStatements
+
+
 def existsTripleUUU(targetRepo, namespace,
                    subjectLocalName,
                    predicateLocalName,
@@ -198,20 +231,17 @@ def addTripleUUUns(targetRepo, namespace,
                                                  subjectLocalName,
                                                  predicateLocalName,
                                                  objectLocalName)
-    numberAdded = 0
 
     if(preventDuplicates):
         if(existsTripleUUU(targetRepo,namespace,subjectLocalName,predicateLocalName,objectLocalName,conn)):
             print "exists, ignoring save"
-            numberAdded = 0
         else:
-            beforeCount = conn.size()
+            print ("adding new ... %s" % conn.size())
             conn.add(subject_, predicate_, object_)
-            afterCount = conn.size()
-            numberAdded = afterCount-beforeCount
+
     else:
         print "grok why allowing duplicate UUU triples is a good idea????"
-    return numberAdded
+    return conn.size()
 
 
 
@@ -225,15 +255,15 @@ def addTripleLULnsTyped(targetRepo, namespace,
                                                  predicateLocalName,
                                                  objLiteral,datatype)
 
-    numberAdded = 0
-
-
-    beforeCount = conn.size()
-    conn.add(subject_, predicate_, object_)
-    afterCount = conn.size()
-    numberAdded = afterCount-beforeCount
-
-    return numberAdded
+    if(preventDuplicates):
+        if( existsTripleLULnsTyped(targetRepo,namespace,subjectLocalName,predicateLocalName,objLiteral,conn,datatype)):
+            print "existed, no update"
+        else:
+            print ("adding new ... %s" % conn.size())
+            conn.add(subject_, predicate_, object_)
+    else:
+        print "must still grok why dups should be allowed???"
+    return conn.size()
 
 def addTripleLUUns(targetRepo, namespace,
                    subjectLocalName,
@@ -261,36 +291,29 @@ def addTripleUULnsTyped(targetRepo, namespace,
                                                  predicateLocalName,
                                                  objLiteral,datatype)
 
-    numberAdded = 0
+
 
     if(preventDuplicates):
         print "check exists"
         if( existsTripleUULnsTyped(targetRepo,namespace,subjectLocalName,predicateLocalName,objLiteral,conn,datatype)):
             print "existed, no update"
-            numberAdded = 1
         else:
-            print "adding new ..."
-            beforeCount = conn.size()
+            print ("adding new ... %s" % conn.size())
+
             conn.add(subject_, predicate_, object_)
-            afterCount = conn.size()
-            numberAdded = afterCount-beforeCount
+
     else:
         print "must still grok why dups should be allowed???"
-    return numberAdded
+    return conn.size()
 
 
 def addTripleUUL(targetRepo, subjectURI, predicateURI, objLiteral):
     conn = getConn(targetRepo)
-
     subject_ = conn.createURI(subjectURI)
     predicate_ = conn.createURI(predicateURI)
     object_ = conn.createLiteral(objLiteral)
-
-    beforeCount = conn.size()
     conn.add(subject_,predicate_,object_)
-    afterCount = conn.size()
-
-    return afterCount-beforeCount
+    return conn.size()
 
 
 
@@ -302,11 +325,9 @@ def addTripleTypedObj(targetRepo, subjectURI, predicateURI, objLiteral, datatype
     predicate_ = conn.createURI(predicateURI)
     object_ = conn.createLiteral(objLiteral, datatype_)
 
-    beforeCount = conn.size()
     conn.add(subject_,predicate_,object_)
-    afterCount = conn.size()
 
-    return afterCount-beforeCount
+    return conn.size()
 
 
 
