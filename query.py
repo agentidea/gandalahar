@@ -51,6 +51,18 @@ def __getTypedLiteral(conn, namespace, subjectLocalName, predicateLocalName, obj
 
     return subject_, predicate_, object_
 
+def __getUU(conn, namespace, subjectLocalName, predicateLocalName):
+    exns = "http://%s/" % namespace
+    subject_ = conn.createURI(namespace=exns, localname=subjectLocalName)
+    predicate_ = conn.createURI(namespace=exns, localname=predicateLocalName)
+    return subject_, predicate_
+
+def __getLU(conn, namespace, subjectLocalName, predicateLocalName):
+    exns = "http://%s/" % namespace
+    subject_ = conn.createLiteral(subjectLocalName,__getDatatype("STRING"))
+    predicate_ = conn.createURI(namespace=exns, localname=predicateLocalName)
+    return subject_, predicate_
+
 def __getLUL(conn, namespace, subjectLocalName, predicateLocalName,
              objLiteral=None, datatype="STRING"):
     exns = "http://%s/" % namespace
@@ -155,6 +167,36 @@ def existsTripleUULnsTyped(targetRepo, namespace,
         conn.close()
 
         return numStatements
+
+
+def getTripleUU(targetRepo, namespace,
+                   subjectLiteral,
+                   predicateLocalName):
+
+
+        conn = getConn(targetRepo)
+
+        subject_, predicate_ = __getUU(conn,
+                                       namespace,
+                                       subjectLiteral,
+                                       predicateLocalName)
+
+        statements = conn.getStatements(subject_,predicate_, None)
+
+        numStatements = len(statements.string_tuples)
+
+        counter = 0
+        for s in statements:
+            print type(s)
+            print s
+            counter = counter + 1
+
+
+        statements.close()
+        conn.close()
+
+        return numStatements
+
 
 def existsTripleLULnsTyped(targetRepo, namespace,
                    subjectLiteral,
