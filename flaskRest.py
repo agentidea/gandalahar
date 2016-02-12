@@ -4,7 +4,7 @@ from flask.ext.cors import CORS
 from query import *
 from mailnewsparse import proc as getBreakingNews
 from midsummer import getPlayers
-
+from NorvigSpell import Spell
 import sys
 import os.path
 from datetime import datetime
@@ -197,6 +197,20 @@ class Midsummer(Resource):
 
         return ret
 
+@naturalLanguage.route('/spellOne/<word>')
+class SpellOne(Resource):
+    def get(self, word):
+        ret = None
+        correct = True 
+        try:
+            spel = Spell()
+            ret = spel.correct(word) 
+            if ret != word:
+                correct = False
+	except Exception as spelex:
+            ret = spelex
+
+        return {"word":word, "corrected":ret, "correct":correct }
 
 @humanNS.route('/model/<attribute>')
 class Model(Resource):

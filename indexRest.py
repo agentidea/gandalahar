@@ -11,4 +11,5 @@ sys.path.append(corpi)
 app.config['APPLICATION_ROOT'] = '/api/'
 
 def application(environ, start_response):
+    app.logger.debug("environ %s" % environ)
     return app(environ, start_response)
