@@ -27,9 +27,9 @@ for d in data:
 			sub = sub.replace(":",' ')
 			sub = sub.strip()
 			col.append(sub)
-MAX=5
+
 count=0 
 for c in col:
-	if count<MAX:
+	if count<6:
 		sendPayload(c)
 	count = count + 1
