@@ -212,6 +212,21 @@ class SpellOne(Resource):
 
         return {"word":word, "corrected":ret, "correct":correct }
 
+@naturalLanguage.route('/spellMany')
+class SpellMany(Resource):
+    def get(self, word):
+        ret = None
+        correct = True
+        try:
+            spel = Spell()
+            ret = spel.correct(word)
+            if ret != word:
+                correct = False
+        except Exception as spelex:
+            ret = spelex
+
+        return {"word":word, "corrected":ret, "correct":correct }
+
 @humanNS.route('/model/<attribute>')
 class Model(Resource):
     def get(self, attribute):
