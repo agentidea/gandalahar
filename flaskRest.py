@@ -262,6 +262,15 @@ class BreakingNews(Resource):
     def post(self):
         api.abort(403)
 
+@debugNS.route('/tim/<code>')
+class Tim(Resource):
+    def get(self, code):
+        timestamp_=str(datetime.now())
+        if(int(code)==200 or int(code)==201):
+            return "time is {}".format(timestamp_)
+        else:
+            api.abort(int(code))
+
 
 if __name__ == '__main__':
     #app.run(host='localhost', port=7878, debug=True)
