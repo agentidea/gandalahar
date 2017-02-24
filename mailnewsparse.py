@@ -95,7 +95,10 @@ def proc():
             elif emailInfo['src'].strip() in allowedSrcs:
                 ret.append(emailInfo)
             else:
-                print "odd man out", " ", emailInfo['src'], emailInfo['subject']
+                if emailInfo['src'] in ['grantsteinfeld@agentidea.com','grantsteinfeld@gmail.com']:
+                    ret.append(emailInfo)
+                else:
+                    print "odd man out", " ", emailInfo['src'], emailInfo['subject']
 
     return ret
 
