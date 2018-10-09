@@ -2,15 +2,19 @@
 # -*- coding: utf-8 -*-
 # pylint: disable-msg=C0103
 
-###############################################################################
-# Copyright (c) 2006-2015 Franz Inc.
-# All rights reserved. This program and the accompanying materials
-# are made available under the terms of the Eclipse Public License v1.0
-# which accompanies this distribution, and is available at
-# http://www.eclipse.org/legal/epl-v10.html
-###############################################################################
+################################################################################
+# Copyright (c) 2006-2017 Franz Inc.  
+# All rights reserved. This program and the accompanying materials are
+# made available under the terms of the MIT License which accompanies
+# this distribution, and is available at http://opensource.org/licenses/MIT
+################################################################################
 
 from __future__ import absolute_import
+from __future__ import unicode_literals
+from past.builtins import basestring
+from builtins import object
+from future import standard_library
+standard_library.install_aliases()
 
 from franz import miniclient
 from ..exceptions import IllegalArgumentException
@@ -18,7 +22,7 @@ from ..model import URI, ValueFactory
 from .repositoryconnection import RepositoryConnection
 from ..vocabulary.xmlschema import XMLSchema
 
-import re, urllib
+import re, urllib.request, urllib.parse, urllib.error
 
 # * A Sesame repository that contains RDF data that can be queried and updated.
 # * Access to the repository can be acquired by opening a connection to it.

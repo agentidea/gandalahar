@@ -1,17 +1,16 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-# pylint: disable-msg=C0103
+################################################################################
+# Copyright (c) 2006-2017 Franz Inc.  
+# All rights reserved. This program and the accompanying materials are
+# made available under the terms of the MIT License which accompanies
+# this distribution, and is available at http://opensource.org/licenses/MIT
+################################################################################
+from __future__ import unicode_literals
+from builtins import range
+from builtins import object
 
-###############################################################################
-# Copyright (c) 2006-2015 Franz Inc.
-# All rights reserved. This program and the accompanying materials
-# are made available under the terms of the Eclipse Public License v1.0
-# which accompanies this distribution, and is available at
-# http://www.eclipse.org/legal/epl-v10.html
-###############################################################################
+from future.utils import python_2_unicode_compatible
+from past.builtins import unicode
 
-
-#from franz.openrdf.exceptions import 
 from ..model import Statement
 from ..repository.repositoryresult import RepositoryResult
 
@@ -66,7 +65,7 @@ class TupleQueryResult(QueryResult):
     def __iter__(self):
         return self
     
-    def next(self):
+    def __next__(self):
         if self.cursor >= self.tuple_count:
             raise StopIteration()
 
@@ -91,6 +90,7 @@ class TupleQueryResult(QueryResult):
         return len(self)
 
 
+@python_2_unicode_compatible
 class ListBindingSet(object):
     """
     A BindingSet is a set of named value bindings, which is used to
@@ -137,7 +137,7 @@ class ListBindingSet(object):
             return self._get_ith_value(self.variable_names.index(key))
         except ValueError:
             raise KeyError(("Illegal key '%s' passed to binding set." +
-                            "\n   Legal keys are %s") % (key, str(self.variable_names)))
+                            "\n   Legal keys are %s") % (key, unicode(self.variable_names)))
 
  
     def iterator(self):
@@ -205,9 +205,6 @@ class ListBindingSet(object):
         return d
         
     def __str__(self):
-        return unicode(self).encode('utf-8')
-
-    def __unicode__(self):
         return unicode(self._toDict(strings_dict=True))
     
 
@@ -236,4 +233,3 @@ class Binding(namedtuple('Binding', 'name value')):
 
 #############################################################################
 ##
-#############################################################################

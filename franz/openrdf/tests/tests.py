@@ -1,18 +1,29 @@
-###############################################################################
-# Copyright (c) 2006-2015 Franz Inc.
-# All rights reserved. This program and the accompanying materials
-# are made available under the terms of the Eclipse Public License v1.0
-# which accompanies this distribution, and is available at
-# http://www.eclipse.org/legal/epl-v0.html
-###############################################################################
+# coding=utf-8
+################################################################################
+# Copyright (c) 2006-2017 Franz Inc.  
+# All rights reserved. This program and the accompanying materials are
+# made available under the terms of the MIT License which accompanies
+# this distribution, and is available at http://opensource.org/licenses/MIT
+################################################################################
 
 from __future__ import absolute_import
+from __future__ import print_function
+from __future__ import unicode_literals
 from __future__ import with_statement
+
+import pytest
+from future import standard_library
+
+standard_library.install_aliases()
+
+from past.builtins import long
+from future.builtins import range, next, object, str
+
+from future.utils import iteritems, iterkeys
 
 from ..exceptions import RequestError
 from ..sail.allegrographserver import AllegroGraphServer
 from ..repository.repository import Repository
-from ...miniclient import repository
 from ..query.query import QueryLanguage
 from ..vocabulary.rdf import RDF
 from ..vocabulary.rdfs import RDFS
@@ -22,13 +33,17 @@ from ..query.dataset import Dataset
 from ..rio.rdfformat import RDFFormat
 from ..rio.rdfwriter import  NTriplesWriter
 from ..rio.rdfxmlwriter import RDFXMLWriter
-from ..model import Literal, Statement, URI, ValueFactory
+from ..model import BNode, Literal, Statement, URI, ValueFactory
 
-from nose.tools import eq_, assert_raises
-from nose import SkipTest
+from nose.tools import eq_, assert_raises, raises
 
-import pycurl
-import os, urllib, datetime, time, locale, StringIO, subprocess, threading, warnings
+from franz.miniclient.request import backend
+use_curl = backend.__name__ == 'curl'
+
+if use_curl:
+    import pycurl
+
+import os, datetime, locale, io, subprocess, sys, warnings
 
 locale.setlocale(locale.LC_ALL, '')
 
@@ -36,7 +51,7 @@ def trace(formatter, values=None, stamp=False):
     prefix = '\ntests [%s]:' % (datetime.datetime.now()) if stamp else '\n'
     if values:
         formatter = locale.format_string(formatter, values, grouping=True)
-    print prefix, formatter
+    print(prefix, formatter)
 
 CURRENT_DIRECTORY = os.path.dirname(__file__)
 
@@ -44,15 +59,24 @@ LOCALHOST = 'localhost'
 AG_HOST = os.environ.get('AGRAPH_HOST', LOCALHOST)
 AG_PORT = int(os.environ.get('AGRAPH_PORT', '10035'))
 AG_SSLPORT = int(os.environ.get('AGRAPH_SSL_PORT', '10036'))
+AG_PROXY = os.environ.get('AGRAPH_PROXY')
 AG_ONSERVER = AG_HOST == LOCALHOST
+USER = os.environ.get('AGRAPH_USER', 'test')
+PASSWORD = os.environ.get('AGRAPH_PASSWORD', 'xyzzy')
 
-CATALOG = 'tests'
+CATALOG = os.environ.get('AGRAPH_CATALOG', 'tests')
+
+# Support "/" as an alias for the root catalog.
+if CATALOG == '/':
+    CATALOG = None
+
 STORE = 'agraph_test'
 
-def teardown():
+
+def teardown_module():
     """Module level teardown function."""
-    server = AllegroGraphServer(AG_HOST, AG_PORT, 'test', 'xyzzy')
-    catalog = server.openCatalog(CATALOG)  
+    server = AllegroGraphServer(AG_HOST, AG_PORT, USER, PASSWORD, proxy=AG_PROXY)
+    catalog = server.openCatalog(CATALOG)
 
     for repo in catalog.listRepositories():
         catalog.deleteRepository(repo)
@@ -70,22 +94,22 @@ def verify(expressionValue, targetValue, quotedExpression, testNum):
         if RAISE_EXCEPTION_ON_VERIFY_FAILURE:
             raise Exception(message)
         else:
-            print "BWEEP BWEEP BWEEP BWEEP BWEEP BWEEP BWEEP BWEEP BWEEP BWEEP BWEEP BWEEP BWEEP BWEEP BWEEP \n   ", message
+            print("BWEEP BWEEP BWEEP BWEEP BWEEP BWEEP BWEEP BWEEP BWEEP BWEEP BWEEP BWEEP BWEEP BWEEP BWEEP \n   ", message)
 
 def test0():
-    server = AllegroGraphServer(AG_HOST, AG_PORT, 'test', 'xyzzy')
-    print "Available catalogs", server.listCatalogs()
+    server = AllegroGraphServer(AG_HOST, AG_PORT, USER, PASSWORD, proxy=AG_PROXY)
+    print("Available catalogs", server.listCatalogs())
 
 def connect(accessMode=Repository.RENEW):
     """
     Connect is called by the other tests to startup the connection to the test database.
     """
-    print "Default working directory is '%s'" % (CURRENT_DIRECTORY)
-    server = AllegroGraphServer(AG_HOST, AG_PORT, 'test', 'xyzzy')
-    print "Available catalogs", server.listCatalogs()
+    print("Default working directory is '%s'" % CURRENT_DIRECTORY)
+    server = AllegroGraphServer(AG_HOST, AG_PORT, USER, PASSWORD, proxy=AG_PROXY)
+    print("Available catalogs", server.listCatalogs())
     catalog = server.openCatalog(CATALOG)
     stores = catalog.listRepositories()
-    print "Available repositories in catalog '%s':  %s" % (catalog.getName(), catalog.listRepositories())    
+    print("Available repositories in catalog '%s':  %s" % (catalog.getName(), catalog.listRepositories()))
 
     # Instead of renewing the database, clear it.
     if accessMode == Repository.RENEW:
@@ -100,9 +124,9 @@ def connect(accessMode=Repository.RENEW):
     if accessMode == Repository.RENEW:
         connection.clear()
         connection.clearNamespaces()
-        
-    print "Repository %s is up!  It contains %i statements." % (
-                myRepository.getDatabaseName(), connection.size())
+
+    print("Repository %s is up!  It contains %i statements." % (
+                myRepository.getDatabaseName(), connection.size()))
     return connection
 
 def test1(accessMode=Repository.RENEW):
@@ -110,7 +134,7 @@ def test1(accessMode=Repository.RENEW):
     Tests getting the repository up.
     """
     return connect(accessMode)
-    
+
 def test2():
     conn = connect()
     ## create some resources and literals to make statements out of
@@ -121,8 +145,8 @@ def test2():
     person = conn.createURI("http://example.org/ontology/Person")
     bobsName = conn.createLiteral("Bob")
     alicesName = conn.createLiteral("Alice")
-    print "Triple count before inserts: ", conn.size()
-    for s in conn.getStatements(None, None, None, None): print s    
+    print("Triple count before inserts: ", conn.size())
+    for s in conn.getStatements(None, None, None, None): print(s)
     ## alice is a person
     conn.add(alice, RDF.TYPE, person)
     ## alice's name is "Alice"
@@ -131,45 +155,45 @@ def test2():
     conn.add(bob, RDF.TYPE, person)
     ## bob's name is "Bob":
     conn.add(bob, name, bobsName)
-    print "Triple count: ", conn.size()
+    print("Triple count: ", conn.size())
     verify(conn.size(), 4, 'conn.size()', 2)
-    for s in conn.getStatements(None, None, None, None): print s    
+    for s in conn.getStatements(None, None, None, None): print(s)
     conn.remove(bob, name, bobsName)
-    print "Triple count: ", conn.size()
+    print("Triple count: ", conn.size())
     verify(conn.size(), 3, 'conn.size()', 2)
-    conn.add(bob, name, bobsName)    
+    conn.add(bob, name, bobsName)
     return conn
-    
-def test3():    
+
+def test3():
     conn = test2()
     try:
         queryString = "SELECT ?s ?p ?o  WHERE {?s ?p ?o .}"
         tupleQuery = conn.prepareTupleQuery("SPARQL", queryString)
-        result = tupleQuery.evaluate();
+        result = tupleQuery.evaluate()
         verify(result.rowCount(), 4, 'len(result)', 3)
         try:
             for bindingSet in result:
                 s = bindingSet.getValue("s")
                 p = bindingSet.getValue("p")
-                o = bindingSet.getValue("o")              
-                print "%s %s %s" % (s, p, o)
+                o = bindingSet.getValue("o")
+                print("%s %s %s" % (s, p, o))
         finally:
             result.close();
     finally:
         conn.close();
-        
+
 def test4():
     conn = test2()
     alice = conn.createURI("http://example.org/people/alice")
 #    statements = conn.getStatements(alice, None, None, tripleIDs=True)
-    print "Searching for Alice using getStatements():"
+    print("Searching for Alice using getStatements():")
     statements = conn.getStatements(alice, None, None)
     statements.enableDuplicateFilter() ## there are no duplicates, but this exercises the code that checks
     verify(statements.rowCount(), 2, 'statements.rowCount()', 3)
     for s in statements:
-        print s
+        print(s)
     statements.close()
-               
+
 def test5():
     """
     Typed Literals
@@ -178,21 +202,21 @@ def test5():
     exns = "http://example.org/people/"
     alice = conn.createURI("http://example.org/people/alice")
     age = conn.createURI(namespace=exns, localname="age")
-    weight = conn.createURI(namespace=exns, localname="weight")    
+    weight = conn.createURI(namespace=exns, localname="weight")
     favoriteColor = conn.createURI(namespace=exns, localname="favoriteColor")
     birthdate = conn.createURI(namespace=exns, localname="birthdate")
     ted = conn.createURI(namespace=exns, localname="Ted")
     red = conn.createLiteral('Red')
     rouge = conn.createLiteral('Rouge', language="fr")
     fortyTwo = conn.createLiteral('42', datatype=XMLSchema.INT)
-    fortyTwoInteger = conn.createLiteral('42', datatype=XMLSchema.LONG)     
+    fortyTwoInteger = conn.createLiteral('42', datatype=XMLSchema.LONG)
     fortyTwoUntyped = conn.createLiteral('42')
-    date = conn.createLiteral('1984-12-06', datatype=XMLSchema.DATE)     
-    time = conn.createLiteral('1984-12-06T09:00:00', datatype=XMLSchema.DATETIME)   
+    date = conn.createLiteral('1984-12-06', datatype=XMLSchema.DATE)
+    time = conn.createLiteral('1984-12-06T09:00:00', datatype=XMLSchema.DATETIME)
     weightFloat = conn.createLiteral('20.5', datatype=XMLSchema.FLOAT)
     weightUntyped = conn.createLiteral('20.5')
     stmt1 = conn.createStatement(alice, age, fortyTwo)
-    stmt2 = conn.createStatement(ted, age, fortyTwoUntyped)    
+    stmt2 = conn.createStatement(ted, age, fortyTwoUntyped)
     conn.add(stmt1)
     conn.addStatement(stmt2)
     conn.addTriple(alice, weight, weightUntyped)
@@ -203,99 +227,99 @@ def test5():
                      (ted, birthdate, time)])
     for obj in [None, fortyTwo, fortyTwoUntyped, conn.createLiteral('20.5', datatype=XMLSchema.FLOAT), conn.createLiteral('20.5'),
                 red, rouge]:
-        print "Retrieve triples matching '%s'." % obj
+        print("Retrieve triples matching '%s'." % obj)
         statements = conn.getStatements(None, None, obj)
         for s in statements:
-            print s
+            print(s)
     for obj in ['42', '"42"', '20.5', '"20.5"', '"20.5"^^xsd:float', '"Rouge"@fr', '"Rouge"', '"1984-12-06"^^xsd:date']:
-        print "Query triples matching '%s'." % obj
-        queryString = """PREFIX xsd: <http://www.w3.org/2001/XMLSchema#> 
+        print("Query triples matching '%s'." % obj)
+        queryString = """PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
         SELECT ?s ?p ?o WHERE {?s ?p ?o . filter (?o = %s)}""" % obj
         tupleQuery = conn.prepareTupleQuery(QueryLanguage.SPARQL, queryString)
-        result = tupleQuery.evaluate();    
+        result = tupleQuery.evaluate();
         for bindingSet in result:
             s = bindingSet[0]
             p = bindingSet[1]
             o = bindingSet[2]
-            print "%s %s %s" % (s, p, o)
+            print("%s %s %s" % (s, p, o))
     ## Search for date using date object in triple pattern.
-    print "Retrieve triples matching DATE object."
+    print("Retrieve triples matching DATE object.")
     statements = conn.getStatements(None, None, date)
     for s in statements:
-        print s
+        print(s)
     ## Search for datetime using datetime object in triple pattern.
-    print "Retrieve triples matching DATETIME object."
+    print("Retrieve triples matching DATETIME object.")
     statements = conn.getStatements(None, None, time)
     for s in statements:
-        print s
+        print(s)
     ## Search for specific date value.
-    print "Match triples having specific DATE value."
+    print("Match triples having specific DATE value.")
     statements = conn.getStatements(None, None, '"1984-12-06"^^<http://www.w3.org/2001/XMLSchema#date>')
     for s in statements:
-        print s
+        print(s)
     ## Search for specific datetime value.
-    print "Match triples having specific DATETIME value."
+    print("Match triples having specific DATETIME value.")
     statements = conn.getStatements(None, None, '"1984-12-06T09:00:00"^^<http://www.w3.org/2001/XMLSchema#dateTime>')
     for s in statements:
-        print s
+        print(s)
     ## Search for triples of type xsd:date using SPARQL query.
-    print "Use SPARQL to find triples where the value matches a specific xsd:date."
+    print("Use SPARQL to find triples where the value matches a specific xsd:date.")
     queryString = """SELECT ?s ?p WHERE {?s ?p "1984-12-06"^^<http://www.w3.org/2001/XMLSchema#date> }"""
     tupleQuery = conn.prepareTupleQuery(QueryLanguage.SPARQL, queryString)
-    result = tupleQuery.evaluate();    
+    result = tupleQuery.evaluate();
     for bindingSet in result:
         s = bindingSet[0]
         p = bindingSet[1]
-        print "%s %s" % (s, p)
+        print("%s %s" % (s, p))
     ## Search for triples of type xsd:datetime using SPARQL query.
-    print "Use SPARQL to find triples where the value matches a specific xsd:dateTime."
+    print("Use SPARQL to find triples where the value matches a specific xsd:dateTime.")
     queryString = """SELECT ?s ?p WHERE {?s ?p "1984-12-06T09:00:00"^^<http://www.w3.org/2001/XMLSchema#dateTime> }"""
     tupleQuery = conn.prepareTupleQuery(QueryLanguage.SPARQL, queryString)
-    result = tupleQuery.evaluate();    
+    result = tupleQuery.evaluate();
     for bindingSet in result:
         s = bindingSet[0]
         p = bindingSet[1]
-        print "%s %s" % (s, p)
+        print("%s %s" % (s, p))
 
 
 def test6(conn = None):
     if conn is None:
         conn = connect()
     else:
-        conn.clear()   
-    print "Starting example test6()."
+        conn.clear()
+    print("Starting example test6().")
     # The following paths are relative to os.getcwd(), the working directory.
-    print "Default working directory is '%s'" % (CURRENT_DIRECTORY)
-    # If you get a "file not found" error, use os.chdir("your directory path") to 
+    print("Default working directory is '%s'" % (CURRENT_DIRECTORY))
+    # If you get a "file not found" error, use os.chdir("your directory path") to
     # point to the location of the data files. For AG Free Edition on Windows:
     #os.chdir("C:\Program Files\AllegroGraphFJE32\python")
-    print "Current working directory is '%s'" % (os.getcwd())
+    print("Current working directory is '%s'" % (os.getcwd()))
     path1 = os.path.join(CURRENT_DIRECTORY, "vc-db-1.rdf")
     path2 = os.path.join(CURRENT_DIRECTORY, "kennedy.ntriples")
     baseURI = "http://example.org/example/local"
     context = conn.createURI("http://example.org#vcards")
     conn.setNamespace("vcd", "http://www.w3.org/2001/vcard-rdf/3.0#");
     ## read kennedy triples into the null context:
-    print "Load kennedy.ntriples."
+    print("Load kennedy.ntriples.")
     #conn.add(path2, base=baseURI, format=RDFFormat.NTRIPLES, contexts=None)
     conn.add(path2, base=baseURI, format=RDFFormat.NTRIPLES)
     ## read vcards triples into the context 'context':
-    print "Load vcards triples."
+    print("Load vcards triples.")
     conn.addFile(path1, baseURI, format=RDFFormat.RDFXML, context=context);
-    print "After loading, repository contains %i vcard triples in context '%s'\n    and   %i kennedy triples in context '%s'." % (
-           conn.size(context), context, conn.size('null'), 'null')
+    print("After loading, repository contains %i vcard triples in context '%s'\n    and   %i kennedy triples in context '%s'." % (
+           conn.size(context), context, conn.size('null'), 'null'))
     verify(conn.size(context), 16, 'conn.size(context)', 6)
-    verify(conn.size('null'), 1214, "conn.size('null)", 6)    
+    verify(conn.size('null'), 1214, "conn.size('null)", 6)
     return conn
-        
-def test7():    
+
+def test7():
     conn = test6()
-    print "Match all and print subjects and contexts"
+    print("Match all and print subjects and contexts")
     result = conn.getStatements(None, None, None, None, limit=25, tripleIDs=True)
     assert len(result) == 25
     first_ids = set()
     for row in result:
-        print row.getSubject(), row.getContext()
+        print(row.getSubject(), row.getContext())
         first_ids.add(row.getTripleID())
     # Test limit/offset
     result = conn.getStatements(None, None, None, None, limit=25, offset=25, tripleIDs=True)
@@ -304,15 +328,14 @@ def test7():
     for row in result:
         second_ids.add(row.getTripleID())
     assert not first_ids.intersection(second_ids)
-    print "\nSame thing with SPARQL query (can't retrieve triples in the null context)"
+    print("\nSame thing with SPARQL query (can't retrieve triples in the null context)")
     queryString = "SELECT DISTINCT ?s ?c WHERE {graph ?c {?s ?p ?o .} }"
     tupleQuery = conn.prepareTupleQuery(QueryLanguage.SPARQL, queryString)
     result = tupleQuery.evaluate();
     for i, bindingSet in enumerate(result):
-        print bindingSet[0], bindingSet[1]
+        print(bindingSet[0], bindingSet[1])
     conn.close()
 
-import urlparse
 
 def test8():
     conn = test6()
@@ -342,12 +365,12 @@ def test10():
     bob = conn.createURI(namespace=exns, localname="bob")
     ted = conn.createURI(namespace=exns, localname="ted")
     person = conn.createURI(namespace=exns, localname="Person")
-    name = conn.createURI(namespace=exns, localname="name")    
-    alicesName = conn.createLiteral("Alice")    
+    name = conn.createURI(namespace=exns, localname="name")
+    alicesName = conn.createLiteral("Alice")
     bobsName = conn.createLiteral("Bob")
-    tedsName = conn.createLiteral("Ted")    
-    context1 = conn.createURI(namespace=exns, localname="cxt1")      
-    context2 = conn.createURI(namespace=exns, localname="cxt2")          
+    tedsName = conn.createLiteral("Ted")
+    context1 = conn.createURI(namespace=exns, localname="cxt1")
+    context2 = conn.createURI(namespace=exns, localname="cxt2")
     conn.add(alice, RDF.TYPE, person, context1)
     conn.add(alice, name, alicesName, context1)
     conn.add(bob, RDF.TYPE, person, context2)
@@ -356,49 +379,49 @@ def test10():
     conn.add(ted, name, tedsName)
     statements = conn.getStatements(None, None, None)
     verify(statements.rowCount(), 6, 'statements.rowCount()', 10)
-    print "All triples in all contexts:"
+    print("All triples in all contexts:")
     for s in statements:
-        print s
+        print(s)
     statements = conn.getStatements(None, None, None, [context1, context2])
     verify(statements.rowCount(), 4, 'statements.rowCount()', 10)
-    print "Triples in contexts 1 or 2:"
+    print("Triples in contexts 1 or 2:")
     for s in statements:
-        print s
+        print(s)
     statements = conn.getStatements(None, None, None, ['null', context2])
     verify(statements.rowCount(), 4, 'statements.rowCount()', 10)
-    print "Triples in contexts null or 2:"
+    print("Triples in contexts null or 2:")
     for s in statements:
-        print s
+        print(s)
     ## testing named graph query:
     queryString = """
     SELECT ?s ?p ?o ?c
-    WHERE { GRAPH ?c {?s ?p ?o . } } 
+    WHERE { GRAPH ?c {?s ?p ?o . } }
     """
     ds = Dataset()
     ds.addNamedGraph(context1)
     ds.addNamedGraph(context2)
     tupleQuery = conn.prepareTupleQuery(QueryLanguage.SPARQL, queryString)
     tupleQuery.setDataset(ds)
-    result = tupleQuery.evaluate(); 
-    verify(result.rowCount(), 4, 'result.rowCount()', 10)   
-    print "Query over contexts 1 and 2."
+    result = tupleQuery.evaluate();
+    verify(result.rowCount(), 4, 'result.rowCount()', 10)
+    print("Query over contexts 1 and 2.")
     for bindingSet in result:
-        print bindingSet.getRow()
+        print(bindingSet.getRow())
     ## testing default graph query:
     queryString = """
-    SELECT ?s ?p ?o    
-    WHERE {?s ?p ?o . } 
+    SELECT ?s ?p ?o
+    WHERE {?s ?p ?o . }
     """
     ds = Dataset()
     ds.addDefaultGraph('null')
     tupleQuery = conn.prepareTupleQuery(QueryLanguage.SPARQL, queryString)
-    tupleQuery.setDataset(ds)   
-    result = tupleQuery.evaluate(); 
-    verify(result.rowCount(), 2, 'result.rowCount()', 10)    
-    print "Query over the null context."
+    tupleQuery.setDataset(ds)
+    result = tupleQuery.evaluate();
+    verify(result.rowCount(), 2, 'result.rowCount()', 10)
+    print("Query over the null context.")
     for bindingSet in result:
-        print bindingSet.getRow()
-    
+        print(bindingSet.getRow())
+
 def test11():
     """
     Namespaces
@@ -411,14 +434,14 @@ def test11():
     conn.setNamespace('ex', exns)
     #conn.removeNamespace('ex')
     queryString = """
-    SELECT ?s ?p ?o 
+    SELECT ?s ?p ?o
     WHERE { ?s ?p ?o . FILTER ((?p = rdf:type) && (?o = ex:Person) ) }
     """
     tupleQuery = conn.prepareTupleQuery(QueryLanguage.SPARQL, queryString)
-    result = tupleQuery.evaluate();  
-    print    
+    result = tupleQuery.evaluate();
+    print()
     for bindingSet in result:
-        print bindingSet[0], bindingSet[1], bindingSet[2]
+        print(bindingSet[0], bindingSet[1], bindingSet[2])
 
 def test12():
     """
@@ -429,77 +452,78 @@ def test12():
     conn.setNamespace('ex', exns)
     alice = conn.createURI(namespace=exns, localname="alice1")
     persontype = conn.createURI(namespace=exns, localname="Person")
-    fullname = conn.createURI(namespace=exns, localname="fullname")    
+    fullname = conn.createURI(namespace=exns, localname="fullname")
     alicename = conn.createLiteral('Alice B. Toklas')
     book =  conn.createURI(namespace=exns, localname="book1")
     booktype = conn.createURI(namespace=exns, localname="Book")
-    booktitle = conn.createURI(namespace=exns, localname="title")    
+    booktitle = conn.createURI(namespace=exns, localname="title")
     wonderland = conn.createLiteral('Alice in Wonderland')
-    conn.clear()    
+    conn.clear()
     conn.add(alice, RDF.TYPE, persontype)
     conn.add(alice, fullname, alicename)
-    conn.add(book, RDF.TYPE, booktype)    
-    conn.add(book, booktitle, wonderland) 
+    conn.add(book, RDF.TYPE, booktype)
+    conn.add(book, booktitle, wonderland)
     conn.setNamespace('ex', exns)
-    print "Whole-word match for 'Alice'"
+    conn.createFreeTextIndex("index")
+    print("Whole-word match for 'Alice'")
     queryString = """
     SELECT ?s ?p ?o
     WHERE { ?s ?p ?o . ?s fti:match 'Alice' . }
     """
     tupleQuery = conn.prepareTupleQuery(QueryLanguage.SPARQL, queryString)
-    result = tupleQuery.evaluate(); 
-    print "Found %i query results" % len(result)
+    result = tupleQuery.evaluate();
+    print("Found %i query results" % len(result))
     count = 0
     for bindingSet in result:
-        print bindingSet
+        print(bindingSet)
         count += 1
         if count > 5: break
-    print "Wildcard match for 'Ali*'"
+    print("Wildcard match for 'Ali*'")
     queryString = """
     SELECT ?s ?p ?o
     WHERE { ?s ?p ?o . ?s fti:match 'Ali*' . }
     """
     tupleQuery = conn.prepareTupleQuery(QueryLanguage.SPARQL, queryString)
-    result = tupleQuery.evaluate(); 
-    print "Found %i query results" % len(result)
+    result = tupleQuery.evaluate();
+    print("Found %i query results" % len(result))
     count = 0
     for bindingSet in result:
-        print bindingSet
+        print(bindingSet)
         count += 1
         if count > 5: break
-    print "Wildcard match for '?l?c?'"
+    print("Wildcard match for '?l?c?'")
     queryString = """
     SELECT ?s ?p ?o
     WHERE { ?s ?p ?o . ?s fti:match '?l?c?' . }
     """
     tupleQuery = conn.prepareTupleQuery(QueryLanguage.SPARQL, queryString)
-    result = tupleQuery.evaluate(); 
-    print "Found %i query results" % len(result)
+    result = tupleQuery.evaluate();
+    print("Found %i query results" % len(result))
     count = 0
     for bindingSet in result:
-        print bindingSet
+        print(bindingSet)
         count += 1
         if count > 5: break
-    print "Substring match for 'lic'"
+    print("Substring match for 'lic'")
     queryString = """
     SELECT ?s ?p ?o
     WHERE { ?s ?p ?o . FILTER regex(?o, "lic") }
     """
     tupleQuery = conn.prepareTupleQuery(QueryLanguage.SPARQL, queryString)
-    result = tupleQuery.evaluate(); 
-    print "Found %i query results" % len(result)
+    result = tupleQuery.evaluate();
+    print("Found %i query results" % len(result))
     count = 0
     for bindingSet in result:
-        print bindingSet
+        print(bindingSet)
         count += 1
         if count > 5: break
-#    queryString=""" 
+#    queryString="""
 #    SELECT ?s ?p ?o
 #    WHERE { ?s ?p ?o . FILTER regex(?o, "Ali") }
 #    """
 def test13():
     """
-    Ask, Construct, and Describe queries 
+    Ask, Construct, and Describe queries
     """
     conn = test2()
     conn.setNamespace('ex', "http://example.org/people/")
@@ -507,24 +531,24 @@ def test13():
     queryString = """select ?s ?p ?o where { ?s ?p ?o} """
     tupleQuery = conn.prepareTupleQuery(QueryLanguage.SPARQL, queryString)
     result = tupleQuery.evaluate();
-    print "SELECT result"
-    for r in result: print r     
+    print("SELECT result")
+    for r in result: print(r)
     queryString = """ask { ?s ont:name "Alice" } """
     booleanQuery = conn.prepareBooleanQuery("SPARQL", queryString)
-    result = booleanQuery.evaluate(); 
-    print "Boolean result", result
+    result = booleanQuery.evaluate();
+    print("Boolean result", result)
     queryString = """construct {?s ?p ?o} where { ?s ?p ?o . filter (?o = "Alice") } """
     constructQuery = conn.prepareGraphQuery(QueryLanguage.SPARQL, queryString)
-    result = constructQuery.evaluate(); 
+    result = constructQuery.evaluate();
     for st in result:
-        print "Construct result, S P O values in statement:", st.getSubject(), st.getPredicate(), st.getObject()
+        print("Construct result, S P O values in statement:", st.getSubject(), st.getPredicate(), st.getObject())
     #print "Construct result", [st for st in result]
     queryString = """describe ?s where { ?s ?p ?o . filter (?o = "Alice") } """
     describeQuery = conn.prepareGraphQuery(QueryLanguage.SPARQL, queryString)
-    result = describeQuery.evaluate(); 
-    print "Describe result"
-    for st in result: print st 
-    
+    result = describeQuery.evaluate();
+    print("Describe result")
+    for st in result: print(st)
+
 def test14():
     """
     Parametric queries
@@ -535,14 +559,14 @@ def test14():
     queryString = """select ?s ?p ?o where { ?s ?p ?o} """
     tupleQuery = conn.prepareTupleQuery(QueryLanguage.SPARQL, queryString)
     tupleQuery.setBinding("s", alice)
-    result = tupleQuery.evaluate()    
-    print "Facts about Alice:"
-    for r in result: print r  
-    tupleQuery.setBinding("s", bob)
-    print "Facts about Bob:"    
     result = tupleQuery.evaluate()
-    for r in result: print r  
-    
+    print("Facts about Alice:")
+    for r in result: print(r)
+    tupleQuery.setBinding("s", bob)
+    print("Facts about Bob:")
+    result = tupleQuery.evaluate()
+    for r in result: print(r)
+
 def test15():
     """
     Range matches
@@ -552,33 +576,33 @@ def test15():
     conn.setNamespace('ex', exns)
     alice = conn.createURI(namespace=exns, localname="alice")
     bob = conn.createURI(namespace=exns, localname="bob")
-    carol = conn.createURI(namespace=exns, localname="carol")    
-    age = conn.createURI(namespace=exns, localname="age")    
+    carol = conn.createURI(namespace=exns, localname="carol")
+    age = conn.createURI(namespace=exns, localname="age")
     age_range = conn.createRange(30, 50)
     # range = conn.createRange(24, 42)  #this setting demonstrates that the limits are inclusive.
     if True: conn.registerDatatypeMapping(predicate=age, nativeType=int)
-    # True, True: Alice Age 42(int) AND Carol Age 39(int)  
+    # True, True: Alice Age 42(int) AND Carol Age 39(int)
     # True, False: Alice Age 42(int) AND Carol Age 39(int)
     # False, True: Alice Age 42(int)
     # False, False: Error
     conn.add(alice, age, 42)
-    conn.add(bob, age, 24) 
-    conn.add(carol, age, "39") 
+    conn.add(bob, age, 24)
+    conn.add(carol, age, "39")
     rows = conn.getStatements(None, age, age_range)
     assert len(rows) > 0
     for r in rows:
-        print r 
+        print(r)
 
 def test16():
     """
     Federated triple stores.
     """
     def pt(kind, rows, expected):
-        print "\n%s Apples:\t" % kind.capitalize(),
-        for r in rows: print r[0].getLocalName(),
+        print("\n%s Apples:\t" % kind.capitalize(), end=' ')
+        for r in rows: print(r[0].getLocalName(), end=' ')
         assert len(rows) == expected
-    
-    server = AllegroGraphServer(AG_HOST, AG_PORT, 'test', 'xyzzy')
+
+    server = AllegroGraphServer(AG_HOST, AG_PORT, USER, PASSWORD, proxy=AG_PROXY)
     catalog = server.openCatalog(CATALOG)
     redConn = catalog.getRepository("redthings", Repository.RENEW).initialize().getConnection()
     greenConn = catalog.getRepository("greenthings", Repository.RENEW).initialize().getConnection()
@@ -589,16 +613,16 @@ def test16():
         ex = "http://www.demo.com/example#"
         redConn.setNamespace('ex', ex)
         greenConn.setNamespace('ex', ex)
-        rainbowConn.setNamespace('ex', ex)        
+        rainbowConn.setNamespace('ex', ex)
         redConn.add(redConn.createURI(ex+"mcintosh"), RDF.TYPE, redConn.createURI(ex+"Apple"))
-        redConn.add(redConn.createURI(ex+"reddelicious"), RDF.TYPE, redConn.createURI(ex+"Apple"))    
+        redConn.add(redConn.createURI(ex+"reddelicious"), RDF.TYPE, redConn.createURI(ex+"Apple"))
         greenConn.add(greenConn.createURI(ex+"pippin"), RDF.TYPE, greenConn.createURI(ex+"Apple"))
         greenConn.add(greenConn.createURI(ex+"kermitthefrog"), RDF.TYPE, greenConn.createURI(ex+"Frog"))
         queryString = "select ?s where { ?s rdf:type ex:Apple }"
         ## query each of the stores; observe that the federated one is the union of the other two:
         pt("red", redConn.prepareTupleQuery(QueryLanguage.SPARQL, queryString).evaluate(), 2)
         pt("green", greenConn.prepareTupleQuery(QueryLanguage.SPARQL, queryString).evaluate(), 1)
-        pt("federated", rainbowConn.prepareTupleQuery(QueryLanguage.SPARQL, queryString).evaluate(), 3) 
+        pt("federated", rainbowConn.prepareTupleQuery(QueryLanguage.SPARQL, queryString).evaluate(), 3)
     finally:
         rainbowConn.closeSession()
 
@@ -620,19 +644,19 @@ def kennedy_male_names(conn=None):
             (q ?person !kdy:last-name ?last)
             )"""
     tupleQuery2 = conn.prepareTupleQuery(QueryLanguage.PROLOG, queryString2)
-    return tupleQuery2.evaluate()    
-    
+    return tupleQuery2.evaluate()
+
 
 def test17():
     """
     Prolog queries
     """
     with connect().session() as conn:
-        result = kennedy_male_names(conn);     
+        result = kennedy_male_names(conn);
         for bindingSet in result:
             f = bindingSet.getValue("first")
             l = bindingSet.getValue("last")
-            print "%s %s" % (f, l)
+            print("%s %s" % (f, l))
 
 
 def test18():
@@ -641,30 +665,30 @@ def test18():
     """
 #    def pq(queryString):
 #        tupleQuery = conn.prepareTupleQuery(QueryLanguage.PROLOG, queryString)
-#        result = tupleQuery.evaluate();     
+#        result = tupleQuery.evaluate();
 #        for row in result:
 #            print row
-    with connect().session() as conn:        
+    with connect().session() as conn:
         test6(conn)
         conn.setNamespace("kdy", "http://www.franz.com/simple#")
-        conn.setNamespace("rltv", "http://www.franz.com/simple#")  
+        conn.setNamespace("rltv", "http://www.franz.com/simple#")
         path = os.path.join(CURRENT_DIRECTORY, "relative_rules.txt")
         conn.loadRules(path)
     #    pq("""(select ?x (string-concat ?x "a" "b" "c"))""")
     #    pq("""(select (?person ?uncle) (uncle ?y ?x)(name ?x ?person)(name ?y ?uncle))""")
         queryString = """(select (?person ?uncle) (uncle ?y ?x)(name ?x ?person)(name ?y ?uncle))"""
         tupleQuery = conn.prepareTupleQuery("PROLOG", queryString)
-        result = tupleQuery.evaluate();     
+        result = tupleQuery.evaluate();
         for bindingSet in result:
             p = bindingSet.getValue("person")
             u = bindingSet.getValue("uncle")
-            print "%s is the uncle of %s." % (u, p)
-        
+            print("%s is the uncle of %s." % (u, p))
+
 def test19():
     ## Examples of RDFS++ inference.  Was originally example 2A.
     conn = connect()
-    print "Beginning test19()..."
-    ## Create URIs for Bob and Robert (and kids) 
+    print("Beginning test19()...")
+    ## Create URIs for Bob and Robert (and kids)
     robert = conn.createURI("http://example.org/people/robert")
     roberta = conn.createURI("http://example.org/people/roberta")
     bob = conn.createURI("http://example.org/people/bob")
@@ -673,7 +697,7 @@ def test19():
     name = conn.createURI("http://example.org/ontology/name")
     fatherOf = conn.createURI("http://example.org/ontology/fatherOf")
     person = conn.createURI("http://example.org/ontology/Person")
-    ## create literal values for names    
+    ## create literal values for names
     bobsName = conn.createLiteral("Bob")
     bobbysName = conn.createLiteral("Bobby")
     robertsName = conn.createLiteral("Robert")
@@ -695,53 +719,53 @@ def test19():
     ## bob has a child
     conn.add(bob, fatherOf, bobby)
     ## List the children of Robert, with inference OFF.
-    print "Children of Robert, inference OFF"
-    for s in conn.getStatements(robert, fatherOf, None, None): print s    
+    print("Children of Robert, inference OFF")
+    for s in conn.getStatements(robert, fatherOf, None, None): print(s)
     ## List the children of Robert with inference ON. The owl:sameAs
     ## link combines the children of Bob with those of Robert.
-    print "Children of Robert, inference ON"
-    for s in conn.getStatements(robert, fatherOf, None, None, True): print s  
-    ## Remove the owl:sameAs link so we can try the next example. 
+    print("Children of Robert, inference ON")
+    for s in conn.getStatements(robert, fatherOf, None, None, True): print(s)
+    ## Remove the owl:sameAs link so we can try the next example.
     conn.remove(bob, OWL.SAMEAS, robert)
     ## Define new predicate, hasFather, as the inverse of fatherOf.
     hasFather = conn.createURI("http://example.org/ontology/hasFather")
     conn.add(hasFather, OWL.INVERSEOF, fatherOf)
     ## Search for people who have fathers, even though there are no hasFather triples.
     ## With inference OFF.
-    print "People with fathers, inference OFF"
-    for s in conn.getStatements(None, hasFather, None, None): print s    
-    ## With inference ON. The owl:inverseOf link allows AllegroGraph to 
+    print("People with fathers, inference OFF")
+    for s in conn.getStatements(None, hasFather, None, None): print(s)
+    ## With inference ON. The owl:inverseOf link allows AllegroGraph to
     ## deduce the inverse links.
-    print "People with fathers, inference ON"
-    for s in conn.getStatements(None, hasFather, None, None, True): print s  
+    print("People with fathers, inference ON")
+    for s in conn.getStatements(None, hasFather, None, None, True): print(s)
     ## Remove owl:inverseOf property.
     conn.remove(hasFather, OWL.INVERSEOF, fatherOf)
       ## Next 12 lines were for owl:inverseFunctionalProperty, but that isn't
-      ## supported yet in AG.  Commenting them out. 
-      ## Add fatherOf link from Robert to Bobby, giving Bobby two fathers. 
+      ## supported yet in AG.  Commenting them out.
+      ## Add fatherOf link from Robert to Bobby, giving Bobby two fathers.
       #conn.add(robert, fatherOf, bobby)
       ## Now make fatherOf a 'reverse functional property'
       #conn.add(fatherOf, RDF.TYPE, OWL.INVERSEFUNCTIONALPROPERTY)
-      ## Bob has how many children? 
+      ## Bob has how many children?
       ## With inference OFF.
       #print "Who is Bob the father of, inference OFF"
-      #for s in conn.getStatements(bob, fatherOf, None, None): print s    
+      #for s in conn.getStatements(bob, fatherOf, None, None): print s
       ## With inference ON. AllegroGraph knows that Bob and Robert must
       ## be the same person.
       #print "Who is Bob the father of, inference ON"
-      #for s in conn.getStatements(bob, fatherOf, None, None, True): print s  
+      #for s in conn.getStatements(bob, fatherOf, None, None, True): print s
     ## Subproperty example.  We'll make fatherOf an rdfs:subpropertyOf parentOf.
     parentOf = conn.createURI("http://example.org/ontology/parentOf")
     conn.add(fatherOf, RDFS.SUBPROPERTYOF, parentOf)
     ## Now search for inferred parentOf links.
     ## Search for parentOf links, even though there are no parentOf triples.
     ## With inference OFF.
-    print "People with parents, inference OFF"
-    for s in conn.getStatements(None, parentOf, None, None): print s    
-    ## With inference ON. The rdfs:subpropertyOf link allows AllegroGraph to 
+    print("People with parents, inference OFF")
+    for s in conn.getStatements(None, parentOf, None, None): print(s)
+    ## With inference ON. The rdfs:subpropertyOf link allows AllegroGraph to
     ## deduce that fatherOf links imply parentOf links.
-    print "People with parents, inference ON"
-    for s in conn.getStatements(None, parentOf, None, None, True): print s  
+    print("People with parents, inference ON")
+    for s in conn.getStatements(None, parentOf, None, None, True): print(s)
     conn.remove(fatherOf, RDFS.SUBPROPERTYOF, parentOf)
     ## The next example shows rdfs:range and rdfs:domain in action.
     ## We'll create two new rdf:type classes.  Note that classes are capitalized.
@@ -751,18 +775,18 @@ def test19():
     conn.add(fatherOf, RDFS.DOMAIN, parent)
     conn.add(fatherOf, RDFS.RANGE, child)
     ## Now we can search for rdf:type parent.
-    print "Who are the parents?  Inference ON."
-    for s in conn.getStatements(None, RDF.TYPE, parent, None, True): print s
+    print("Who are the parents?  Inference ON.")
+    for s in conn.getStatements(None, RDF.TYPE, parent, None, True): print(s)
     ## And we can search for rdf:type child.
-    print "Who are the children?  Inference ON."
-    for s in conn.getStatements(None, RDF.TYPE, child, None, True): print s
-    
+    print("Who are the children?  Inference ON.")
+    for s in conn.getStatements(None, RDF.TYPE, child, None, True): print(s)
+
 def test20():
     """
     GeoSpatial Reasoning
     """
     conn = connect();
-    print "Starting example test20()."
+    print("Starting example test20().")
     exns = "http://example.org/people/"
     conn.setNamespace('ex', exns)
     alice = conn.createURI(exns, "alice")
@@ -772,14 +796,14 @@ def test20():
     location = conn.createURI(exns, "location")
     conn.add(alice, location, conn.createCoordinate(30,30))
     conn.add(bob, location, conn.createCoordinate(40, 40))
-    conn.add(carol, location, conn.createCoordinate(50, 50)) 
-    box1 = conn.createBox(20, 40, 20, 40) 
-    print box1
-    print "Find people located within box1."
+    conn.add(carol, location, conn.createCoordinate(50, 50))
+    box1 = conn.createBox(20, 40, 20, 40)
+    print(box1)
+    print("Find people located within box1.")
     results = conn.getStatements(None, location, box1)
     assert len(results) == 2
     for r in results:
-        print r
+        print(r)
     # Test limit/offset of same
     results = conn.getStatements(None, location, box1, limit=1, offset=0)
     assert len(results) == 1
@@ -788,13 +812,13 @@ def test20():
     results = conn.getStatements(None, location, box1, limit=1, offset=2)
     assert len(results) == 0
 
-    circle1 = conn.createCircle(35, 35, radius=10)  
-    print circle1
-    print "Find people located within circle1."
+    circle1 = conn.createCircle(35, 35, radius=10)
+    print(circle1)
+    print("Find people located within circle1.")
     results = conn.getStatements(None, location, circle1)
     assert len(results) == 2
     for r in results:
-        print r 
+        print(r)
     # Test limit/offset of same
     results = conn.getStatements(None, location, circle1, limit=1, offset=0)
     assert len(results) == 1
@@ -804,62 +828,62 @@ def test20():
     assert len(results) == 0
 
     polygon1 = conn.createPolygon([(10,40), (50,10), (35,40), (50,70)])
-    print polygon1
-    print "Find people located within polygon1."
-    for r in conn.getStatements(None, location, polygon1) : print r
+    print(polygon1)
+    print("Find people located within polygon1.")
+    for r in conn.getStatements(None, location, polygon1) : print(r)
     # now we switch to a LatLong (spherical) coordinate system
     #latLongGeoType = conn.createLatLongSystem(scale=5) #, unit='km')
     latLongGeoType = conn.createLatLongSystem(scale=5, unit='degree')
     amsterdam = conn.createURI(exns, "amsterdam")
     london = conn.createURI(exns, "london")
     sanfrancisto = conn.createURI(exns, "sanfrancisco")
-    salvador = conn.createURI(exns, "salvador")    
+    salvador = conn.createURI(exns, "salvador")
     location = conn.createURI(exns, "geolocation")
     conn.add(amsterdam, location, conn.createCoordinate(52.366665, 4.883333))
     conn.add(london, location, conn.createCoordinate(51.533333, -0.08333333))
-    conn.add(sanfrancisto, location, conn.createCoordinate(37.783333, -122.433334)) 
-    conn.add(salvador, location, conn.createCoordinate(13.783333, -88.45))   
-    box2 = conn.createBox( 25.0, 50.0, -130.0, -70.0) 
-    print box2
-    print "Locate entities within box2."
-    for r in conn.getStatements(None, location, box2) : print r    
+    conn.add(sanfrancisto, location, conn.createCoordinate(37.783333, -122.433334))
+    conn.add(salvador, location, conn.createCoordinate(13.783333, -88.45))
+    box2 = conn.createBox( 25.0, 50.0, -130.0, -70.0)
+    print(box2)
+    print("Locate entities within box2.")
+    for r in conn.getStatements(None, location, box2) : print(r)
     circle2 = conn.createCircle(19.3994, -99.08, 2000, unit='km')
-    print circle2
-    print "Locate entities within circle2."
-    for r in conn.getStatements(None, location, circle2) : print r
+    print(circle2)
+    print("Locate entities within circle2.")
+    for r in conn.getStatements(None, location, circle2) : print(r)
     polygon2 = conn.createPolygon([(51.0, 2.00),(60.0, -5.0),(48.0,-12.5)])
-    print polygon2
-    print "Locate entities within polygon2."
-    for r in conn.getStatements(None, location, polygon2) : print r
+    print(polygon2)
+    print("Locate entities within polygon2.")
+    for r in conn.getStatements(None, location, polygon2) : print(r)
     # experiments in units for lat/long type
-    print "km"
+    print("km")
     latLongGeoType1 = conn.createLatLongSystem(scale=5, unit='km')
-    print latLongGeoType1
-    print "degree"
+    print(latLongGeoType1)
+    print("degree")
     latLongGeoType2 = conn.createLatLongSystem(scale=5, unit='degree')
-    print latLongGeoType2
-    print "mile"
+    print(latLongGeoType2)
+    print("mile")
     latLongGeoType3 = conn.createLatLongSystem(scale=5, unit='miles')
-    print latLongGeoType3
-    print "radian"
+    print(latLongGeoType3)
+    print("radian")
     latLongGeoType4 = conn.createLatLongSystem(scale=5, unit='radian')
-    print latLongGeoType4
-    print "megaton"
+    print(latLongGeoType4)
+    print("megaton")
     latLongGeoType5 = conn.createLatLongSystem(scale=5, unit='megaton')
-    print latLongGeoType5
+    print(latLongGeoType5)
 
 def test21():
     """
     Social Network Analysis Reasoning
     """
     with connect().session() as conn:
-        print "Starting example test21()."
-        print "Current working directory is '%s'" % (os.getcwd())
+        print("Starting example test21().")
+        print("Current working directory is '%s'" % (os.getcwd()))
         path1 = os.path.join(CURRENT_DIRECTORY, "lesmis.rdf")
-        print "Load Les Miserables triples."
+        print("Load Les Miserables triples.")
         conn.addFile(path1, None, format=RDFFormat.RDFXML)
-        print "After loading, repository contains %i Les Miserables triples in context '%s'." % (
-               conn.size('null'), 'null')
+        print("After loading, repository contains %i Les Miserables triples in context '%s'." % (
+               conn.size('null'), 'null'))
         genName = "LesMiserables"
         lmns = "http://www.franz.com/lesmis#"
         conn.setNamespace('lm', lmns)
@@ -881,8 +905,8 @@ def test22():
     with connect().session() as conn:
         path1 = os.path.join(CURRENT_DIRECTORY, "lesmis.rdf")
         conn.addFile(path1, None, format=RDFFormat.RDFXML);
-        print "After loading, repository contains %i Les Miserables triples in context '%s'." % (
-           conn.size('null'), 'null')
+        print("After loading, repository contains %i Les Miserables triples in context '%s'." % (
+           conn.size('null'), 'null'))
 
         # Create URIs for relationship predicates.
         lmns = "http://www.franz.com/lesmis#"
@@ -890,30 +914,30 @@ def test22():
         knows = conn.createURI(lmns, "knows")
         barely_knows = conn.createURI(lmns, "barely_knows")
         knows_well = conn.createURI(lmns, "knows_well")
-    
+
         # Create URIs for some characters.
         valjean = conn.createURI(lmns, "character11")
         bossuet = conn.createURI(lmns, "character64")
-    
+
         # Create some generators
         #print "\nSNA generators known (should be none): '%s'" % (conn.listSNAGenerators())
-        conn.registerSNAGenerator("intimates", subjectOf=None, objectOf=None, 
+        conn.registerSNAGenerator("intimates", subjectOf=None, objectOf=None,
             undirected=knows_well, generator_query=None)
-        conn.registerSNAGenerator("associates", subjectOf=None, objectOf=None, 
+        conn.registerSNAGenerator("associates", subjectOf=None, objectOf=None,
             undirected=[knows, knows_well], generator_query=None)
-        conn.registerSNAGenerator("everyone", subjectOf=None, objectOf=None, 
-            undirected=[knows, knows_well, barely_knows], 
+        conn.registerSNAGenerator("everyone", subjectOf=None, objectOf=None,
+            undirected=[knows, knows_well, barely_knows],
             generator_query=None)
-        print "Created three generators."
+        print("Created three generators.")
 
         # Create neighbor matrix.
         conn.registerNeighborMatrix("matrix1", "intimates", valjean, max_depth=2)
         conn.registerNeighborMatrix("matrix2", "associates", valjean, max_depth=5)
         conn.registerNeighborMatrix("matrix3", "everyone", valjean, max_depth=2)
-        print "Created three matrices."
+        print("Created three matrices.")
 
         # Explore Valjean's ego group.
-        print "\nValjean's ego group members (using associates)."
+        print("\nValjean's ego group members (using associates).")
         queryString = """
         (select (?member ?name)
         (ego-group-member !lm:character11 1 associates ?member)
@@ -921,14 +945,14 @@ def test22():
         """
         tupleQuery = conn.prepareTupleQuery(QueryLanguage.PROLOG, queryString)
         result = tupleQuery.evaluate();
-        print "Found %i query results" % len(result)      
+        print("Found %i query results" % len(result))
         for bindingSet in result:
             p = bindingSet.getValue("member")
             n = bindingSet.getValue("name")
-            print "%s %s" % (p, n)
+            print("%s %s" % (p, n))
 
         # Valjean's ego group using neighbor matrix.
-        print "\nValjean's ego group (using associates matrix)."
+        print("\nValjean's ego group (using associates matrix).")
         queryString = """
         (select (?member ?name)
           (ego-group-member !lm:character11 1 matrix2 ?member)
@@ -936,13 +960,13 @@ def test22():
           """
         tupleQuery = conn.prepareTupleQuery(QueryLanguage.PROLOG, queryString)
         result = tupleQuery.evaluate();
-        print "Found %i query results" % len(result)      
+        print("Found %i query results" % len(result))
         for bindingSet in result:
             p = bindingSet.getValue("member")
             n = bindingSet.getValue("name")
-            print "%s %s" % (p, n)
+            print("%s %s" % (p, n))
 
-        print "\nValjean's ego group in one list depth 1 (using associates)."
+        print("\nValjean's ego group in one list depth 1 (using associates).")
         queryString = """
         (select (?member)
           (ego-group !lm:character11 1 associates ?group)
@@ -950,149 +974,149 @@ def test22():
           """
         tupleQuery = conn.prepareTupleQuery(QueryLanguage.PROLOG, queryString)
         result = tupleQuery.evaluate();
-        print "Found %i query results" % len(result)      
+        print("Found %i query results" % len(result))
         for bindingSet in result:
             p = bindingSet.getValue("member")
-            print "%s" %(p)
+            print("%s" %(p))
 
-        
-        print "\nValjean's ego group in one list depth 1 (using associates)."
+
+        print("\nValjean's ego group in one list depth 1 (using associates).")
         queryString = """
         (select (?group)
           (ego-group !lm:character11 1 associates ?group))
           """
         tupleQuery = conn.prepareTupleQuery(QueryLanguage.PROLOG, queryString)
         result = tupleQuery.evaluate();
-        print "Found %i query results" % len(result)      
+        print("Found %i query results" % len(result))
         for bindingSet in result:
             p = bindingSet.getValue("group")
-            print "[",
+            print("[", end=' ')
             for item in p:
-                print "%s" %(item),
-            print "]"
+                print("%s" %(item), end=' ')
+            print("]")
 
-        print "\nValjean's ego group in one list depth 2 (using associates)."
+        print("\nValjean's ego group in one list depth 2 (using associates).")
         queryString = """
         (select (?group)
           (ego-group !lm:character11 2 associates ?group))
           """
         tupleQuery = conn.prepareTupleQuery(QueryLanguage.PROLOG, queryString)
         result = tupleQuery.evaluate();
-        print "Found %i query results" % len(result)      
+        print("Found %i query results" % len(result))
         for bindingSet in result:
             p = bindingSet.getValue("group")
-            print "[",
+            print("[", end=' ')
             for item in p:
-                print "%s" %(item),
-            print "]"
+                print("%s" %(item), end=' ')
+            print("]")
 
-        print "\nValjean's ego group in one list depth 3 (using associates)."
+        print("\nValjean's ego group in one list depth 3 (using associates).")
         queryString = """
         (select (?group)
           (ego-group !lm:character11 3 associates ?group))
           """
         tupleQuery = conn.prepareTupleQuery(QueryLanguage.PROLOG, queryString)
         result = tupleQuery.evaluate();
-        print "Found %i query results" % len(result)      
+        print("Found %i query results" % len(result))
         for bindingSet in result:
             p = bindingSet.getValue("group")
-            print "[",
+            print("[", end=' ')
             for item in p:
-                print "%s" %(item),
-            print "]"
+                print("%s" %(item), end=' ')
+            print("]")
 
-        print "\nShortest breadth-first path connecting Valjean to Bossuet using intimates."
+        print("\nShortest breadth-first path connecting Valjean to Bossuet using intimates.")
         queryString = """
         (select (?path)
           (breadth-first-search-path !lm:character11 !lm:character64 intimates 10 ?path))
           """
         tupleQuery = conn.prepareTupleQuery(QueryLanguage.PROLOG, queryString)
         result = tupleQuery.evaluate();
-        print "Found %i query results" % len(result)      
+        print("Found %i query results" % len(result))
         for bindingSet in result:
             p = bindingSet.getValue("path")
-            print "[",
+            print("[", end=' ')
             for item in p:
-                print "%s" %(item),
-            print "]"
+                print("%s" %(item), end=' ')
+            print("]")
 
-        print "\nShortest breadth-first path connecting Valjean to Bossuet using associates."
+        print("\nShortest breadth-first path connecting Valjean to Bossuet using associates.")
         queryString = """
         (select (?path)
           (breadth-first-search-path !lm:character11 !lm:character64 associates 10 ?path))
           """
         tupleQuery = conn.prepareTupleQuery(QueryLanguage.PROLOG, queryString)
         result = tupleQuery.evaluate();
-        print "Found %i query results" % len(result)      
+        print("Found %i query results" % len(result))
         for bindingSet in result:
             p = bindingSet.getValue("path")
-            print "[",
+            print("[", end=' ')
             for item in p:
-                print "%s" %(item),
-            print "]"
+                print("%s" %(item), end=' ')
+            print("]")
 
-        print "\nShortest breadth-first path connecting Valjean to Bossuet using everyone."
+        print("\nShortest breadth-first path connecting Valjean to Bossuet using everyone.")
         queryString = """
         (select (?path)
           (breadth-first-search-path !lm:character11 !lm:character64 everyone 10 ?path))
           """
         tupleQuery = conn.prepareTupleQuery(QueryLanguage.PROLOG, queryString)
         result = tupleQuery.evaluate();
-        print "Found %i query results" % len(result)      
+        print("Found %i query results" % len(result))
         for bindingSet in result:
             p = bindingSet.getValue("path")
-            print "[",
+            print("[", end=' ')
             for item in p:
-                print "%s" %(item),
-            print "]"
+                print("%s" %(item), end=' ')
+            print("]")
 
-        print "\nShortest breadth-first path connecting Valjean to Bossuet? with associates (should be two)."
+        print("\nShortest breadth-first path connecting Valjean to Bossuet? with associates (should be two).")
         queryString = """
         (select (?path)
           (breadth-first-search-paths !lm:character11 !lm:character64 associates ?path))
           """
         tupleQuery = conn.prepareTupleQuery(QueryLanguage.PROLOG, queryString)
         result = tupleQuery.evaluate();
-        print "Found %i query results" % len(result)      
+        print("Found %i query results" % len(result))
         for bindingSet in result:
             p = bindingSet.getValue("path")
-            print "[",
+            print("[", end=' ')
             for item in p:
-                print "%s" %(item),
-            print "]"
+                print("%s" %(item), end=' ')
+            print("]")
 
         # Note that depth-first-search-paths are not guaranteed to be "the shortest path."
-        print "\nReturn depth-first path connecting Valjean to Bossuet with associates (should be one)."
+        print("\nReturn depth-first path connecting Valjean to Bossuet with associates (should be one).")
         queryString = """
         (select (?path)
           (depth-first-search-path !lm:character11 !lm:character64 associates 10 ?path))
           """
         tupleQuery = conn.prepareTupleQuery(QueryLanguage.PROLOG, queryString)
         result = tupleQuery.evaluate();
-        print "Found %i query results" % len(result)      
+        print("Found %i query results" % len(result))
         for bindingSet in result:
             p = bindingSet.getValue("path")
-            print "[",
+            print("[", end=' ')
             for item in p:
-                print "%s" %(item),
-            print "]"
+                print("%s" %(item), end=' ')
+            print("]")
 
-        print "\nShortest bidirectional paths connecting Valjean to Bossuet with associates (should be two)."
+        print("\nShortest bidirectional paths connecting Valjean to Bossuet with associates (should be two).")
         queryString = """
         (select (?path)
           (bidirectional-search-paths !lm:character11 !lm:character64 associates ?path))
           """
         tupleQuery = conn.prepareTupleQuery(QueryLanguage.PROLOG, queryString)
         result = tupleQuery.evaluate();
-        print "Found %i query results" % len(result)      
+        print("Found %i query results" % len(result))
         for bindingSet in result:
             p = bindingSet.getValue("path")
-            print "[",
+            print("[", end=' ')
             for item in p:
-                print "%s" %(item),
-            print "]"
+                print("%s" %(item), end=' ')
+            print("]")
 
-        print "\nNodal degree of Valjean (should be seven)."
+        print("\nNodal degree of Valjean (should be seven).")
         queryString = """
         (select ?degree
           (nodal-degree !lm:character11 associates ?degree))
@@ -1101,10 +1125,10 @@ def test22():
         result = tupleQuery.evaluate();
         for bindingSet in result:
             p = bindingSet.getValue("degree")
-            print "%s" % (p)
-            print "%s" % p.toPython()
+            print("%s" % (p))
+            print("%s" % p.toPython())
 
-        print "\nHow many neighbors are around Valjean? (should be 36)."
+        print("\nHow many neighbors are around Valjean? (should be 36).")
         queryString = """
         (select ?neighbors
           (nodal-degree !lm:character11 everyone ?neighbors))
@@ -1113,10 +1137,10 @@ def test22():
         result = tupleQuery.evaluate();
         for bindingSet in result:
             p = bindingSet.getValue("neighbors")
-            print "%s" % (p)
-            print "%s" % p.toPython()
+            print("%s" % (p))
+            print("%s" % p.toPython())
 
-        print "\nWho are Valjean's neighbors? (using everyone)."
+        print("\nWho are Valjean's neighbors? (using everyone).")
         queryString = """
         (select (?name)
           (nodal-neighbors !lm:character11 everyone ?member)
@@ -1128,9 +1152,9 @@ def test22():
         for bindingSet in result:
             count = count + 1
             n = bindingSet.getValue("name")
-            print "%s. %s " % (count,n.toPython())
+            print("%s. %s " % (count,n.toPython()))
 
-        print "\nGraph density of Valjean's ego group? (using associates)."
+        print("\nGraph density of Valjean's ego group? (using associates).")
         queryString = """
         (select ?density
           (ego-group !lm:character11 1 associates ?group)
@@ -1140,10 +1164,10 @@ def test22():
         result = tupleQuery.evaluate();
         for bindingSet in result:
             p = bindingSet.getValue("density")
-            print "%s" % (p)
-            print "%s" % (p.toPython())
+            print("%s" % (p))
+            print("%s" % (p.toPython()))
 
-        print "\nValjean's cliques? Should be two (using associates)."
+        print("\nValjean's cliques? Should be two (using associates).")
         queryString = """
         (select (?clique)
           (clique !lm:character11 associates ?clique))
@@ -1152,13 +1176,13 @@ def test22():
         result = tupleQuery.evaluate();
         for bindingSet in result:
             p = bindingSet.getValue("clique")
-            print "[",
+            print("[", end=' ')
             for item in p:
-                print "%s" %(item),
-            print "]"
+                print("%s" %(item), end=' ')
+            print("]")
 
         # Valjean's actor-degree-centrality using a depth of 1.
-        print "\nValjean's actor-degree-centrality to his ego group at depth 1 (using associates)."
+        print("\nValjean's actor-degree-centrality to his ego group at depth 1 (using associates).")
         queryString = """
         (select (?centrality)
           (ego-group !lm:character11 1 associates ?group)
@@ -1168,11 +1192,11 @@ def test22():
         result = tupleQuery.evaluate();
         for bindingSet in result:
             p = bindingSet.getValue("centrality")
-            print "%s" % (p)
-            print "%s" % (p.toPython())
+            print("%s" % (p))
+            print("%s" % (p.toPython()))
 
         # Valjean's actor-degree-centrality using a depth of 2.
-        print "\nValjean's actor-degree-centrality to his ego group at depth 2 (using associates)."
+        print("\nValjean's actor-degree-centrality to his ego group at depth 2 (using associates).")
         queryString = """
         (select (?centrality)
           (ego-group !lm:character11 2 associates ?group)
@@ -1182,11 +1206,11 @@ def test22():
         result = tupleQuery.evaluate();
         for bindingSet in result:
             p = bindingSet.getValue("centrality")
-            print "%s" % (p)
-            print "%s" % (p.toPython())
+            print("%s" % (p))
+            print("%s" % (p.toPython()))
 
         # Valjean's actor-closeness-centrality using a depth of 1.
-        print "\nValjean's actor-closeness-centrality to his ego group at depth 1 (using associates)."
+        print("\nValjean's actor-closeness-centrality to his ego group at depth 1 (using associates).")
         queryString = """
         (select (?centrality)
           (ego-group !lm:character11 1 associates ?group)
@@ -1196,11 +1220,11 @@ def test22():
         result = tupleQuery.evaluate();
         for bindingSet in result:
             p = bindingSet.getValue("centrality")
-            print "%s" % (p)
-            print "%s" % (p.toPython())
+            print("%s" % (p))
+            print("%s" % (p.toPython()))
 
         # Valjean's actor-closeness-centrality using a depth of 2.
-        print "\nValjean's actor-closeness-centrality to his ego group at depth 2 (using associates)."
+        print("\nValjean's actor-closeness-centrality to his ego group at depth 2 (using associates).")
         queryString = """
         (select (?centrality)
           (ego-group !lm:character11 2 associates ?group)
@@ -1210,11 +1234,11 @@ def test22():
         result = tupleQuery.evaluate();
         for bindingSet in result:
             p = bindingSet.getValue("centrality")
-            print "%s" % (p)
-            print "%s" % (p.toPython())
+            print("%s" % (p))
+            print("%s" % (p.toPython()))
 
         # Valjean's actor-betweenness-centrality using a depth of 2.
-        print "\nValjean's actor-betweenness-centrality to his ego group at depth 2 (using associates)."
+        print("\nValjean's actor-betweenness-centrality to his ego group at depth 2 (using associates).")
         queryString = """
         (select (?centrality)
           (ego-group !lm:character11 2 associates ?group)
@@ -1224,8 +1248,8 @@ def test22():
         result = tupleQuery.evaluate();
         for bindingSet in result:
             p = bindingSet.getValue("centrality")
-            print "%s" % (p)
-            print "%s" % (p.toPython())
+            print("%s" % (p))
+            print("%s" % (p.toPython()))
 
         #  "Group centrality measures the cohesion a group relative to
         #  some measure of actor-centrality. `group-degree-centrality measures
@@ -1234,8 +1258,8 @@ def test22():
         #  centrality and then normalizing. It ranges from 0 (when all actors have
         #  equal degree) to 1 (when one actor is connected to every other and no
         #  other actors have connections."
-        
-        print "\nGroup-degree-centrality of Valjean's ego group at depth 1 (using associates)."
+
+        print("\nGroup-degree-centrality of Valjean's ego group at depth 1 (using associates).")
         queryString = """
         (select (?centrality)
           (ego-group !lm:character11 1 associates ?group)
@@ -1245,9 +1269,9 @@ def test22():
         result = tupleQuery.evaluate();
         for bindingSet in result:
             p = bindingSet.getValue("centrality")
-            print "Centrality: %s" % (p.toPython())
+            print("Centrality: %s" % (p.toPython()))
 
-        print "\nGroup-degree-centrality of Valjean's ego group at depth 2 (using associates)."
+        print("\nGroup-degree-centrality of Valjean's ego group at depth 2 (using associates).")
         queryString = """
         (select (?centrality)
           (ego-group !lm:character11 2 associates ?group)
@@ -1257,7 +1281,7 @@ def test22():
         result = tupleQuery.evaluate();
         for bindingSet in result:
             p = bindingSet.getValue("centrality")
-            print "Centrality: %s" % (p.toPython())
+            print("Centrality: %s" % (p.toPython()))
 
         #  "Group centrality measures the cohesion a group relative to
         #  some measure of actor-centrality. `group-closeness-centrality` is
@@ -1265,7 +1289,7 @@ def test22():
         #  is maximized and then summing the difference between this maximum
         #  value and the [actor-closeness-centrality][] of all other actors.
         #  This value is then normalized so that it ranges between 0 and 1."
-        print "\nGroup-closeness-centrality of Valjean's ego group at depth 1 (using associates)."
+        print("\nGroup-closeness-centrality of Valjean's ego group at depth 1 (using associates).")
         queryString = """
         (select (?centrality)
           (ego-group !lm:character11 1 associates ?group)
@@ -1275,9 +1299,9 @@ def test22():
         result = tupleQuery.evaluate();
         for bindingSet in result:
             p = bindingSet.getValue("centrality")
-            print "Centrality: %s" % (p.toPython())
+            print("Centrality: %s" % (p.toPython()))
 
-        print "\nGroup-closeness-centrality of Valjean's ego group at depth 2 (using associates)."
+        print("\nGroup-closeness-centrality of Valjean's ego group at depth 2 (using associates).")
         queryString = """
         (select (?centrality)
           (ego-group !lm:character11 2 associates ?group)
@@ -1287,7 +1311,7 @@ def test22():
         result = tupleQuery.evaluate();
         for bindingSet in result:
             p = bindingSet.getValue("centrality")
-            print "Centrality: %s" % (p.toPython())
+            print("Centrality: %s" % (p.toPython()))
 
         #  "Group centrality measures the cohesion a group relative to
         #  some measure of actor-centrality. `group-betweenness-centrality` is
@@ -1296,7 +1320,7 @@ def test22():
         #  value and the [actor-betweenness-centrality][] of all other actors.
         #  This value is then normalized so that it ranges between 0 and 1.
 
-        print "\nGroup-betweenness-centrality of Valjean's ego group at depth 1 (using associates)."
+        print("\nGroup-betweenness-centrality of Valjean's ego group at depth 1 (using associates).")
         queryString = """
         (select (?centrality)
           (ego-group !lm:character11 1 associates ?group)
@@ -1306,9 +1330,9 @@ def test22():
         result = tupleQuery.evaluate();
         for bindingSet in result:
             p = bindingSet.getValue("centrality")
-            print "Centrality: %s" % (p.toPython())
+            print("Centrality: %s" % (p.toPython()))
 
-        print "\nGroup-betweenness-centrality of Valjean's ego group at depth 2 (using associates)."
+        print("\nGroup-betweenness-centrality of Valjean's ego group at depth 2 (using associates).")
         queryString = """
         (select (?centrality)
           (ego-group !lm:character11 2 associates ?group)
@@ -1318,29 +1342,103 @@ def test22():
         result = tupleQuery.evaluate();
         for bindingSet in result:
             p = bindingSet.getValue("centrality")
-            print "Centrality: %s" % (p.toPython())
-            
+            print("Centrality: %s" % (p.toPython()))
+
+def testSNA_bug23323():
+    """
+    Social Network Analysis test for bug23323
+    """
+    with connect().session() as conn:
+        print("Starting example testSNA_bug23323().")
+        path1 = os.path.join(CURRENT_DIRECTORY, "lesmis.rdf")
+        print("Load Les Miserables triples.")
+        conn.addFile(path1, None, format=RDFFormat.RDFXML)
+        genName = "LesMiserables"
+        lmns = "http://www.franz.com/lesmis#"
+        conn.setNamespace('lm', lmns)
+
+        prologQuery = """
+        (select (?m)
+          (q ?node !lm:barely_knows ?m))
+"""
+        # Register the generator
+        conn.registerSNAGenerator(genName, subjectOf = None, objectOf = None, undirected = None, generator_query = prologQuery)
+
+        valjean = conn.createURI(lmns, "character11")
+
+        # Create the matrix from the generator
+        conn.registerNeighborMatrix("LesMiserablesNM", genName, valjean, max_depth = 2)
+
+        print("\nValjean's ego group in one list depth 2 (using barely_knows neighbor matrix).")
+        queryString = """
+        (select (?group)
+          (ego-group !lm:character11 2 LesMiserablesNM ?group))
+          """
+        tupleQuery = conn.prepareTupleQuery(QueryLanguage.PROLOG, queryString)
+        result = tupleQuery.evaluate();
+        for bindingSet in result:
+            p = bindingSet.getValue("group")
+            group_count_nm = len(p)
+            print("Group has %i member(s)" % group_count_nm)
+            print("Found %i members" % len(p))
+            print("[", end=' ')
+            for item in p:
+                print("%s ; " %(item), end=' ')
+            print("]")
+
+        # re-register the generator
+        # there is caching involved so if we don't re-register, we'll get the same count
+        # regardless of whether or not bug23323 is fixed.
+        conn.registerSNAGenerator(genName, subjectOf = None, objectOf = None, undirected = None, generator_query = prologQuery)
+
+        print("\nValjean's ego group in one list depth 2 (using barely_knows).")
+        queryString = """
+        (select (?group)
+          (ego-group !lm:character11 2 LesMiserables ?group))
+          """
+        tupleQuery = conn.prepareTupleQuery(QueryLanguage.PROLOG, queryString)
+        result = tupleQuery.evaluate();
+        for bindingSet in result:
+            p = bindingSet.getValue("group")
+            group_count = len(p)
+            print("Found %i members" % group_count)
+            print("[", end=' ')
+            for item in p:
+                print("%s ; " %(item), end=' ')
+            print("]")
+
+        print("Make sure we have the same counts")
+        assert group_count == group_count_nm
+
+
 def test_getStatements():
     conn = test6()
     rows = conn.getStatements(None, None, None, tripleIDs=False)
 
     for row in rows:
-        print '%s %s %s %s' % (row[0], row[1],
-            row[2], row[3])
+        print('%s %s %s %s' % (row[0], row[1],
+            row[2], row[3]))
 
     rows = conn.getStatements(None, None, None, tripleIDs=True)
 
     for row in rows:
-        print '%s %s %s %s %s' % (row[0], row[1],
-            row[2], row[3], row.getTripleID())
+        print('%s %s %s %s %s' % (row[0], row[1],
+            row[2], row[3], row.getTripleID()))
 
+
+def test_result_as_list():
+    conn = test6()
+    rows = conn.getStatements(None, None, None)
+    triples = rows.asList()
+    assert triples is not None
+    assert len(triples) == 1230
 
 def test_session():
     """
     Test of Session Commit/Rollback
     """
-    server = AllegroGraphServer(AG_HOST, AG_PORT, 'test', 'xyzzy')
-    catalog = server.openCatalog(CATALOG)  
+    server = AllegroGraphServer(AG_HOST, AG_PORT, USER, PASSWORD, proxy=AG_PROXY)
+    catalog = server.openCatalog(CATALOG)
     myRepository = catalog.getRepository(STORE, Repository.OPEN)
     myRepository.initialize()
     common = myRepository.getConnection()
@@ -1370,8 +1468,8 @@ def test_temporal():
     """
     Test of temporal range queries.
     """
-    server = AllegroGraphServer(AG_HOST, AG_PORT, 'test', 'xyzzy')
-    catalog = server.openCatalog(CATALOG)  
+    server = AllegroGraphServer(AG_HOST, AG_PORT, USER, PASSWORD, proxy=AG_PROXY)
+    catalog = server.openCatalog(CATALOG)
     myRepository = catalog.getRepository(STORE, Repository.RENEW)
     myRepository.initialize()
     conn = myRepository.getConnection()
@@ -1386,7 +1484,7 @@ def test_temporal():
 
     x_dt = Literal(datetime.datetime(2009, 9, 28, 17, 41, 39))
     y_dt = Literal(datetime.datetime(2009, 9, 28, 18, 22))
-    z_dt = Literal(datetime.datetime(2009, 9, 28, 17, 02, 41))
+    z_dt = Literal(datetime.datetime(2009, 9, 28, 17, 0o2, 41))
 
     conn.addStatement(Statement(x, pred, x_dt))
     conn.addStatement(Statement(y, pred, y_dt))
@@ -1412,7 +1510,7 @@ def test_temporal():
          (:count-only t)
          (q- ?subject ? (? !%s !%s)))''' % (lower, upper)
 
-    print queryString
+    print(queryString)
     count = conn.prepareTupleQuery(QueryLanguage.PROLOG, queryString
         ).evaluate(count=True)
     assert count == 2, '%s\nResult was %d, should be 2.' % (queryString, count)
@@ -1452,7 +1550,7 @@ def test_temporal():
           FILTER (?time >= %s && ?time <= %s) }""" % (
             pred.toNTriples(),
             lower, upper)
-    
+
     results = conn.prepareTupleQuery(QueryLanguage.SPARQL, queryString
         ).evaluate()
 
@@ -1469,12 +1567,12 @@ def test_blanknodes():
     assert node
     value_factory = conn.getValueFactory()
     assert len(value_factory.unusedBNodeIds) + 1 == ValueFactory.BLANK_NODE_AMOUNT
-    
+
 def test_delete_repository():
     """
     Test deleting a Repository.
     """
-    server = AllegroGraphServer(AG_HOST, AG_PORT, 'test', 'xyzzy')
+    server = AllegroGraphServer(AG_HOST, AG_PORT, USER, PASSWORD, proxy=AG_PROXY)
     store = 'for_deletion'
     catalog = server.openCatalog(CATALOG)
     myRepository = catalog.getRepository(store, Repository.RENEW)
@@ -1492,16 +1590,16 @@ def test_enable_spogi_cache():
     assert conn.getSubjectTriplesCacheSize() == 1000
     conn.disableSubjectTriplesCache()
     assert not conn.getSubjectTriplesCacheSize()
-    
+
 def test_delete_mapping():
     conn = test1()
     conn.repository.mini_repository.deleteMappedType(XMLSchema.DATETIME)
-    a_time = conn.createLiteral('1984-12-06T09:00:00.250', datatype=XMLSchema.DATETIME)   
+    a_time = conn.createLiteral('1984-12-06T09:00:00.250', datatype=XMLSchema.DATETIME)
     conn.addTriple('<http://franz.com/example#this>',
         '<http://franz.com/example#hasDate>', a_time)
 
-class URIs:
-    ## Create URIs for Bob and Robert (and kids) 
+class URIs(object):
+    ## Create URIs for Bob and Robert (and kids)
     robert = URI('http://example.org/people/robert')
     roberta = URI('http://example.org/people/roberta')
     bob = URI('http://example.org/people/bob')
@@ -1543,7 +1641,7 @@ def setup():
     conn.add(conn.createBNode(), URIs.pointBlank, conn.createBNode())
     conn.add(conn.createBNode(), URIs.pointBlank, conn.createBNode())
     conn.add(conn.createBNode(), URIs.pointBlank, conn.createBNode())
-    
+
     return conn
 
 def test_query_blank_node():
@@ -1554,17 +1652,17 @@ def test_query_blank_node():
         (URIs.pointBlank))
 
     results = query.evaluate()
-    
+
     # Pick one to use
-    result = results.next()['subject']
-    
-    trace(unicode(result))
+    result = next(results)['subject']
+
+    trace(str(result))
 
     trace('Attempting to query using SPARQL with binding...')
     query = conn.prepareTupleQuery(QueryLanguage.SPARQL, 'SELECT * WHERE { ?subject %s ?object . }' %
         (URIs.pointBlank))
     query.setBinding('subject', result)
-    output = ' '.join([unicode(result) for result in query.evaluate()])
+    output = ' '.join([str(result) for result in query.evaluate()])
     trace(output)
     assert len(output)
 
@@ -1580,14 +1678,14 @@ def test_setInferencing():
     query.setIncludeInferred(True)
     results = query.evaluate()
     on_len = len(results)
-    trace(' '.join([unicode(result) for result in results]))
+    trace(' '.join([str(result) for result in results]))
 
     ## List the children of Robert with inference OFF.
     query.setIncludeInferred(False)
     trace('Querying children of Robert, inferencing OFF')
     results = query.evaluate()
     off_len = len(results)
-    trace(' '.join([unicode(result) for result in results]))
+    trace(' '.join([str(result) for result in results]))
     assert on_len > off_len
 
 def test_json_xml_response():
@@ -1619,7 +1717,7 @@ def test_construct_query():
     """Test whether Construct Query"""
     conn = setup()
     query = conn.prepareGraphQuery("SPARQL",
-        'CONSTRUCT { ?p %s ?child . } WHERE { ?p ?relationship ?child . }' % 
+        'CONSTRUCT { ?p %s ?child . } WHERE { ?p ?relationship ?child . }' %
         URIs.hasChild)
     query.setBinding('relationship', URIs.fatherOf)
     query.setIncludeInferred(True)
@@ -1627,33 +1725,33 @@ def test_construct_query():
     trace('Trying a CONSTRUCT query with inferred ON')
     results = query.evaluate()
     assert len(results)
-    trace('\n'.join([unicode(result) for result in results]))
+    trace('\n'.join([str(result) for result in results]))
 
     query.setIncludeInferred(False)
 
     trace('Trying a CONSTRUCT query with inferred OFF')
     results = query.evaluate()
     assert len(results)
-    trace('\n'.join([unicode(result) for result in results]))
+    trace('\n'.join([str(result) for result in results]))
 
 def test_session_loadinitfile():
     """
     Test starting a session with loadinitfile True.
     """
     # Basically ripped off from the miniclient tests.
-    server = AllegroGraphServer(AG_HOST, AG_PORT, 'test', 'xyzzy')
+    server = AllegroGraphServer(AG_HOST, AG_PORT, USER, PASSWORD, proxy=AG_PROXY)
     conn = connect()
     for x in range(0, 10):
         conn.mini_repository.addStatement("<http:%d>" % x, "<http:before>", "<http:%d>" % (x + 1))
         conn.mini_repository.addStatement("<http:%d>" % (x + 1), "<http:after>", "<http:%d>" % x)
     eq_([["<http:2>"]], conn.mini_repository.evalPrologQuery("(select (?x) (q- ?x !<http:before> !<http:3>))")["values"])
     server.setInitfile("(<-- (after-after ?a ?b) (q- ?a !<http:after> ?x) (q- ?x !<http:after> ?b))")
-    print server.getInitfile()
+    print(server.getInitfile())
     eq_([["<http:5>"]], conn.mini_repository.evalPrologQuery("(select (?x) (after-after ?x !<http:3>))")["values"])
 
     with conn.session(autocommit=True, loadinitfile=True) as session:
         eq_([["<http:5>"]], session.mini_repository.evalPrologQuery("(select (?x) (after-after ?x !<http:3>))")["values"])
-    
+
     with conn.session(autocommit=True, loadinitfile=False) as session:
         assert_raises(RequestError, session.mini_repository.evalPrologQuery, ("(select (?x) (after-after ?x !<http:3>))",))
 
@@ -1733,7 +1831,7 @@ def test_javascript():
     with conn.session():
         conn.evalJavaScript("var x = 100;")
         assert conn.evalJavaScript("x") == 100
-    
+
 def test_roundtrips():
     """
     Test round-tripping of Python values.
@@ -1743,7 +1841,7 @@ def test_roundtrips():
     conn.addTriple('<http:object>', '<http:bool>', True)
     conn.addTriple('<http:object>', '<http:str>', 'Me')
     conn.addTriple('<http:object>', '<http:int>', 1234)
-    conn.addTriple('<http:object>', '<http:long>', 1234L)
+    conn.addTriple('<http:object>', '<http:long>', long(1234))
     conn.addTriple('<http:object>', '<http:date>', now.date())
     conn.addTriple('<http:object>', '<http:datetime>', now)
     conn.addTriple('<http:object>', '<http:time>', now.time())
@@ -1751,23 +1849,23 @@ def test_roundtrips():
     conn.addTriple('<http:objecT>', '<http:time2>', then)
 
     def checkit(name, the_type, value):
-        obj = conn.getStatements(None, '<http:%s>' % name, None
-            ).next().getObject().toPython()
-        assert isinstance(obj, the_type) 
+        obj = next(conn.getStatements(None, '<http:%s>' % name, None)).\
+            getObject().toPython()
+        assert isinstance(obj, the_type)
         assert obj == value
 
     def time_check(name, the_type, value):
-        obj = conn.getStatements(None, '<http:%s>' % name, None
-            ).next().getObject().toPython()
-        assert isinstance(obj, the_type) 
+        obj = next(conn.getStatements(None, '<http:%s>' % name, None)).\
+            getObject().toPython()
+        assert isinstance(obj, the_type)
         # Microseconds can have floating point roundoff...
-        print 'Original:', value, 'Store:', obj
+        print('Original:', value, 'Store:', obj)
         assert obj == value or abs(obj.microsecond - value.microsecond) < 300
 
     checkit("bool", bool, True)
-    checkit("str", basestring, 'Me')
+    checkit("str", str, 'Me')
     checkit("int", int, 1234)
-    checkit("long", long, 1234L)
+    checkit("long", long, long(1234))
     checkit("date", datetime.date, now.date())
     time_check("datetime", datetime.datetime, now)
     time_check("time", datetime.time, now.time())
@@ -1805,21 +1903,21 @@ def test_add_commit_size():
     assert conn.size() == 0
 
 def test_script_management():
-    server = AllegroGraphServer(AG_HOST, AG_PORT, 'test', 'xyzzy')
+    server = AllegroGraphServer(AG_HOST, AG_PORT, USER, PASSWORD, proxy=AG_PROXY)
     scripts = len(server.listScripts())
 
     server.addScript("script.cl", test_script_management.code)
     assert len(server.listScripts()) == (scripts + 1)
     assert server.getScript("script.cl") == test_script_management.code
-    
+
     conn = connect()
     result = conn.callStoredProc("add-two-ints", "script.cl", 1, 2)
-    print result
+    print(result)
     assert int(result) == 3
-    
+
     server.deleteScript("script.cl")
     assert len(server.listScripts()) == scripts
-    
+
 test_script_management.code = """
 ;; ag 4.x style where we let the def-stored-proc code generate code
 ;; to check if the correct number of arguments were passed in the
@@ -1842,8 +1940,8 @@ def test_namespace_management():
     count = len(namespaces)
 
     # assert that all namepaces returned by getNamespaces can be gotten individually
-    print namespaces
-    for namespace, value in namespaces.iteritems():
+    print(namespaces)
+    for namespace, value in iteritems(namespaces):
         assert value == conn.getNamespace(namespace)
 
     test_spaces = {'kdy': 'http://www.franz.com/simple#',
@@ -1852,29 +1950,29 @@ def test_namespace_management():
         'ont': 'http://example.org/ontology/',
         'rltv': 'http://www.franz.com/simple#'}
 
-    for namespace, value in test_spaces.iteritems():
-        print 'calling setNamespace', namespace, value
+    for namespace, value in iteritems(test_spaces):
+        print('calling setNamespace', namespace, value)
         conn.setNamespace(namespace, value)
 
     assert count + len(test_spaces) == len(conn.getNamespaces())
 
-    for namespace, value in test_spaces.iteritems():
+    for namespace, value in iteritems(test_spaces):
         assert value == conn.getNamespace(namespace)
 
     # Try adding a namespace that already exists
-    for namespace, value in test_spaces.iteritems():
+    for namespace, value in iteritems(test_spaces):
         conn.setNamespace(namespace, value)
 
     assert count + len(test_spaces) == len(conn.getNamespaces())
 
     # Remove the original namespaces
-    for namespace in namespaces.iterkeys():
+    for namespace in iterkeys(namespaces):
         conn.removeNamespace(namespace)
 
     # Assert they are gone
     assert len(test_spaces) == len(conn.getNamespaces())
 
-    for namespace in namespaces.iterkeys():
+    for namespace in iterkeys(namespaces):
         assert_raises(RequestError, conn.getNamespace, namespace)
 
     # Test clearing all namespaces
@@ -1883,7 +1981,7 @@ def test_namespace_management():
     assert len(conn.getNamespaces()) == 0
 
     # Add a bunch back and clear with reset
-    for namespace, value in test_spaces.iteritems():
+    for namespace, value in iteritems(test_spaces):
         conn.setNamespace(namespace, value)
 
     assert len(test_spaces) == len(conn.getNamespaces())
@@ -1911,10 +2009,10 @@ def test_indices_on_create():
     """
     Test passing indices to createRepository.
     """
-    server = AllegroGraphServer(AG_HOST, AG_PORT, 'test', 'xyzzy')
+    server = AllegroGraphServer(AG_HOST, AG_PORT, USER, PASSWORD, proxy=AG_PROXY)
     catalog = server.openCatalog(CATALOG)
     if "optimal" in catalog.listRepositories():
-        catalog.deleteRepository("optimal");
+        catalog.deleteRepository("optimal")
 
     indices = ["posgi", "gspoi"]
     myRepository = catalog.createRepository("optimal", indices=indices)
@@ -1959,10 +2057,10 @@ def test_delete_duplicates():
         conn.commit()
 
         assert conn.size() == 2
-        
 
-class URIs:
-    ## Create URIs for Bob and Robert (and kids) 
+
+class URIs(object):
+    ## Create URIs for Bob and Robert (and kids)
     robert = URI('http://example.org/people/robert')
     roberta = URI('http://example.org/people/roberta')
     bob = URI('http://example.org/people/bob')
@@ -1977,9 +2075,9 @@ class URIs:
 
     pointBlank = URI('http://example.org/ontology/pointBlank')
 
-    
 
-    
+
+
 
 def test_bulkmode():
     """
@@ -1993,7 +2091,7 @@ def test_bulkmode():
     repo.bulk_mode = False;
     assert not repo.bulk_mode, "BulkMode should be off."
 
-def test_analyze_query():    
+def test_analyze_query():
     """
     Tests query analysis on a SPARQL Tuple Query.
     """
@@ -2001,7 +2099,7 @@ def test_analyze_query():
     try:
         queryString = "SELECT ?s ?p ?o  WHERE {?s ?p ?o .}"
         tupleQuery = conn.prepareTupleQuery("SPARQL", queryString)
-        result = tupleQuery.analyze(analysisTechnique="static");
+        result = tupleQuery.analyze();
         assert "desired" in result and "actual" in result
         result = tupleQuery.evaluate();
         verify(result.rowCount(), 4, 'len(result)', 3)
@@ -2012,7 +2110,7 @@ def test_users_roles_filters():
     """
     Test user/role/filter management.
     """
-    server = AllegroGraphServer(AG_HOST, AG_PORT, 'test', 'xyzzy')
+    server = AllegroGraphServer(AG_HOST, AG_PORT, USER, PASSWORD, proxy=AG_PROXY)
     assert ['test'] == server.listUsers()
     server.addUser('user-test', 'xyzzy')
     assert 'user-test' in server.listUsers()
@@ -2121,47 +2219,36 @@ def test_users_roles_filters():
     assert len(access) == 0
 
     server.deleteUser('user-test')
-    assert ['test'] == server.listUsers() 
+    assert ['test'] == server.listUsers()
 
+
+@pytest.mark.skipif(not os.environ.get('AG_RUN_SSL_TEST'),
+                    reason='Too difficult to set up if you do not have AG sources.')
 def test_ssl():
     """
     Test the SSL port and certificate functionality via a series of
     server calls to connect to and empty a store.
     """
 
-    if pycurl.version.find(' NSS/') == -1:
-        # Method for when pycurl is compiled with OpenSSL or another
-        # library that supports PEM files
-        server = AllegroGraphServer(AG_HOST, AG_SSLPORT,
-            cainfo=os.path.join(CURRENT_DIRECTORY, 'ca.cert'),
-            sslcert=os.path.join(CURRENT_DIRECTORY, 'test.cert'),
-            # Test files setup for localhost; if running elsewhere don't verify
-            verifyhost=(AG_HOST==LOCALHOST))
-        catalogs = server.listCatalogs()
-    else:
-        # Convert PEM files to NSS db entry w/ name 'Test Client'
-        proc = subprocess.Popen(os.path.join(CURRENT_DIRECTORY, 'ssl-dir.sh'), stdout=subprocess.PIPE)
-        result = proc.communicate() # Ignore this output
-        os.environ['SSL_DIR'] = os.path.join(CURRENT_DIRECTORY, 'certs.db')
-        # Method for when pycurl only support NSS
-        server = AllegroGraphServer(AG_HOST, AG_SSLPORT, 
-            sslcert='Test Client',
-            # Test files setup for localhost; if running elsewhere don't verify
-            verifyhost=(AG_HOST==LOCALHOST))
-        catalogs = server.listCatalogs()
+    server = AllegroGraphServer(AG_HOST, AG_SSLPORT,
+        cainfo=os.path.join(CURRENT_DIRECTORY, 'ca.cert'),
+        sslcert=os.path.join(CURRENT_DIRECTORY, 'test.cert'),
+        # Test files setup for localhost; if running elsewhere don't verify
+        verifyhost=2 if AG_HOST == LOCALHOST else None)
+    catalogs = server.listCatalogs()
 
-    print "Available catalogs", catalogs
-        
+    print("Available catalogs", catalogs)
+
     catalog = server.openCatalog(CATALOG)
     stores = catalog.listRepositories()
-    print "Available repositories in catalog '%s':  %s" % (catalog.getName(), catalog.listRepositories())    
+    print("Available repositories in catalog '%s':  %s" % (catalog.getName(), catalog.listRepositories()))
 
     # Instead of renewing the database, clear it.
     mode = Repository.CREATE if STORE not in stores else Repository.OPEN
 
-    myRepository = catalog.getRepository(STORE, mode)
-    myRepository.initialize()
-    connection = myRepository.getConnection()
+    my_repository = catalog.getRepository(STORE, mode)
+    my_repository.initialize()
+    connection = my_repository.getConnection()
     connection.clear()
     connection.clearNamespaces()
 
@@ -2172,16 +2259,16 @@ def test_save_response():
     Tests saving the response object.
     """
     conn = test2()
-    buf = StringIO.StringIO()
+    buf = io.BytesIO()
     queryString = "SELECT ?s ?p ?o  WHERE {?s ?p ?o .}"
     tupleQuery = conn.prepareTupleQuery("SPARQL", queryString)
     with conn.saveResponse(buf, 'application/sparql-results+xml'):
         tupleQuery.evaluate()
-    
-    print buf.getvalue()
+
+    print(buf.getvalue())
     assert len(buf.getvalue()) > 0
 
-    buf = StringIO.StringIO()
+    buf = io.BytesIO()
     with conn.saveResponse(buf, 'application/rdf+xml', True):
         try:
             conn.getStatements()
@@ -2192,13 +2279,13 @@ def test_save_response():
 
     assert len(buf.getvalue()) == 0
 
-    buf = StringIO.StringIO()
+    buf = io.BytesIO()
     with conn.saveResponse(buf, 'application/rdf+xml'):
         conn.getStatements(subject=None, predicate=None, object=None)
 
-    print buf.getvalue()
+    print(buf.getvalue())
     assert len(buf.getvalue()) > 0
-        
+
 def test_encoded_ids():
     """
     Tests encoded ids.
@@ -2261,9 +2348,9 @@ def test_spin():
         def check_function():
             try:
                 conn.getSpinFunction(age_fn)
-            except RequestError, e:
+            except RequestError as e:
                 if e.message.find("is not a registered SPIN function") >= 0:
-                    print "Correct: no age function is defined."
+                    print("Correct: no age function is defined.")
                 else:
                     assert False, age_fn + " should not exist!"
 
@@ -2284,8 +2371,8 @@ def test_spin():
             + "bind( ex:age( ?person ) as ?age ) .\n"
             + "} order by ?age limit 2").evaluate()
 
-        assert results.next()['age'] == conn.createLiteral(39, XMLSchema.INTEGER)
-        assert results.next()['age'] == conn.createLiteral(43, XMLSchema.INTEGER)
+        assert next(results)['age'] == conn.createLiteral(39, XMLSchema.INTEGER)
+        assert next(results)['age'] == conn.createLiteral(43, XMLSchema.INTEGER)
         results = conn.listSpinFunctions()
         assert results[0]['uri'] == '<' + age_fn + '>'
         assert results[0]['query'] == ageFnSparql
@@ -2298,12 +2385,12 @@ def test_spin():
         def check_property():
             try:
                 conn.getSpinMagicProperty(parents_mp)
-            except RequestError, e:
+            except RequestError as e:
                 if e.message.find("is not a registered SPIN magic property"):
-                    print "Correct: no parents magic property is defined."
+                    print("Correct: no parents magic property is defined.")
                 else:
                     assert False, parents_mp + " should not exist"
-        
+
         check_property()
 
         parents_fn = ("prefix kennedy: <http://www.franz.com/simple#>\n"
@@ -2322,23 +2409,23 @@ def test_spin():
 
         seen_joseph = False
         seen_rose = False
-        
+
         for bindingSet in results:
-            if unicode(bindingSet['parentFirst']) == u'"Joseph"':
+            if str(bindingSet['parentFirst']) == u'"Joseph"':
                 seen_joseph = True
-            if unicode(bindingSet['parentFirst']) == u'"Rose"':
+            if str(bindingSet['parentFirst']) == u'"Rose"':
                 seen_rose = True
-            
+
         assert seen_joseph
         assert seen_rose
 
         results = conn.listSpinMagicProperties()
         assert results[0]['uri'] == "<" + parents_mp + ">"
-        print results[0]['query'] == parents_fn
+        print(results[0]['query'] == parents_fn)
         assert results[0]['arguments'] == "?child"
 
         conn.deleteSpinMagicProperty(parents_mp)
-        
+
         check_property()
 
 
@@ -2351,23 +2438,23 @@ def test_sparql_update():
     person = conn.createURI("http://example.org/ontology/Person")
     bobsName = conn.createLiteral("Bob")
     alicesName = conn.createLiteral("Alice")
-    print "Triple count before inserts: ", conn.size()
-    for s in conn.getStatements(None, None, None, None): print s    
+    print("Triple count before inserts: ", conn.size())
+    for s in conn.getStatements(None, None, None, None): print(s)
     query = "INSERT DATA { %s %s %s. %s %s %s. %s %s %s. %s %s %s. }" % (
         alice.toNTriples(), RDF.TYPE.toNTriples(), person.toNTriples(),
         alice.toNTriples(), name.toNTriples(), alicesName.toNTriples(),
         bob.toNTriples(), RDF.TYPE.toNTriples(), person.toNTriples(),
         bob.toNTriples(), name.toNTriples(), bobsName.toNTriples())
     conn.prepareUpdate(QueryLanguage.SPARQL, query).evaluate()
-    print "Triple count: ", conn.size()
+    print("Triple count: ", conn.size())
     verify(conn.size(), 4, 'conn.size()', 'test_sparql_update')
-    for s in conn.getStatements(None, None, None, None): print s    
+    for s in conn.getStatements(None, None, None, None): print(s)
     query = "DELETE DATA { %s %s %s. }" % (
         bob.toNTriples(), name.toNTriples(), bobsName.toNTriples())
     conn.prepareUpdate(QueryLanguage.SPARQL, query).evaluate()
-    print "Triple count: ", conn.size()
+    print("Triple count: ", conn.size())
     verify(conn.size(), 3, 'conn.size()', 'test_sparql_update')
-    for s in conn.getStatements(None, None, None, None): print s    
+    for s in conn.getStatements(None, None, None, None): print(s)
 
 def test_materializer():
     conn = connect()
@@ -2382,9 +2469,132 @@ def test_materializer():
         <http://www.franz.com/simple#owned-by> <http://www.w3.org/2002/07/owl#inverseOf> <http://www.franz.com/simple#owns> .
         <http://www.franz.com/simple#jans> <http://www.franz.com/simple#has-pet> <http://www.franz.com/simple#birra> .
         """
-    conn.mini_repository.loadData(data, 'ntriples')
+    conn.mini_repository.loadData(data, RDFFormat.NTRIPLES)
 
     entailed = conn.materializeEntailed(_with='all')
-    print "There were", entailed, "entailed triples"
+    print("There were", entailed, "entailed triples")
     assert conn.materializeEntailed(_with="all") >= 40
     assert conn.deleteMaterialized() >= 40
+
+
+def test_escaping():
+    conn = connect()
+    s = conn.createURI(u'http://franz.com/ex#"Zażółć gęślą jaźń"')
+    p = conn.createURI(
+        u'http://franz.com/ex#<langle{lcurl|or^caret\"dblquote\\bslash}rcurl>rangle')
+    t = conn.createURI(u'http://franz.com/ex#"quoted"')
+    o = conn.createLiteral(u'"Zażółć gęślą jaźń"', t)
+    conn.addTriple(s, p, o)
+    results = list(conn.getStatements(None, None, None))
+    assert len(results) == 1
+    assert results[0].getSubject() == s
+    assert results[0].getPredicate() == p
+    assert results[0].getObject() == o
+
+
+def test_uri_eq():
+    x = URI("http://www.franz.com/test")
+    y = URI("http://www.franz.com/test")
+    z = URI("http://www.franz.com/test2")
+    assert x == y
+    assert not x != y
+    assert x != z
+    assert not x == z
+
+
+def test_literal_eq():
+    test = Literal("test")
+    test_eq = Literal("test")
+    test_str = Literal("test", datatype=XMLSchema.STRING)
+    test_str_eq = Literal("test", datatype=XMLSchema.STRING)
+    test_en = Literal("test", language="en_US")
+    test_en_eq = Literal("test", language="en_US")
+    not_test = Literal("not_test")
+
+    assert test == test_eq
+    assert not test != test_eq
+    assert test_str == test_str_eq
+    assert not test_str != test_str_eq
+    assert test_en == test_en_eq
+    assert not test_en != test_en_eq
+
+    assert not test == not_test
+    assert test != not_test
+
+    assert not test == test_str
+    assert test != test_str
+    assert not test == test_en
+    assert test != test_en
+    assert not test_en == test_str
+    assert test_en != test_str
+
+
+def test_value_eq_diffrent_types():
+    uri = URI("http://www.franz.com/test")
+    literal = Literal("http://www.franz.com/test")
+    literal2 = Literal("<http://www.franz.com/test>")
+    text = "<http://www.franz.com/test>"
+
+    assert uri != literal
+    assert not uri == literal
+    assert uri != literal2
+    assert not uri == literal2
+    assert uri != text
+    assert not uri == text
+
+    assert literal2 != text
+
+
+def test_bnode_eq():
+    b42 = BNode(42)
+    b42_eq = BNode(42)
+    b44 = BNode(44)
+
+    assert b42 == b42_eq
+    assert not b42 != b42_eq
+
+    assert b42 != b44
+    assert not b42 == b44
+
+
+if sys.version_info[0] > 2:
+    @raises(TypeError)
+    def test_value_ordering():
+        uri = URI("http://www.franz.com/test")
+        literal = Literal("http://www.franz.com/test")
+        uri < literal
+else:
+    def test_value_ordering():
+        literals = [Literal("urn:x-test:%d" % x) for x in [1, 2, 3]]
+        uris = [URI("urn:x-test:%d" % x) for x in [1, 2, 3]]
+        values = [literals[1], uris[1], uris[0], literals[2], literals[0], uris[2]]
+        values.sort()
+
+        assert values == literals + uris or values == uris + literals
+
+
+def test_turtle_import():
+    conn = connect()
+    path = os.path.join(CURRENT_DIRECTORY, "kennedy.ttl")
+    base_uri = "http://example.org/example/local"
+    conn.addFile(path, base_uri, format=RDFFormat.TURTLE)
+    assert conn.size() == 1214
+
+
+def test_turtle_import_compressed():
+    conn = connect()
+    path = os.path.join(CURRENT_DIRECTORY, "kennedy.ttl.gz")
+    base_uri = "http://example.org/example/local"
+    conn.addFile(path, base_uri, format=RDFFormat.TURTLE)
+    assert conn.size() == 1214
+
+
+def test_turtle_import_from_string():
+    conn = connect()
+    base_uri = "http://example.org/example/local"
+    data = """
+        <jans> <age> 58 ; <livesIn> <place100> .
+        <place100> <name> 'Moraga'; <population> 16000 .
+    """
+    conn.addData(data, RDFFormat.TURTLE, base_uri=base_uri)
+    assert conn.size() == 4

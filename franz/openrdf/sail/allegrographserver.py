@@ -2,21 +2,29 @@
 # -*- coding: utf-8 -*-
 # pylint: disable-msg=C0103
 
-###############################################################################
-# Copyright (c) 2006-2015 Franz Inc.
-# All rights reserved. This program and the accompanying materials
-# are made available under the terms of the Eclipse Public License v1.0
-# which accompanies this distribution, and is available at
-# http://www.eclipse.org/legal/epl-v10.html
-###############################################################################
+################################################################################
+# Copyright (c) 2006-2017 Franz Inc.  
+# All rights reserved. This program and the accompanying materials are
+# made available under the terms of the MIT License which accompanies
+# this distribution, and is available at http://opensource.org/licenses/MIT
+################################################################################
 
 from __future__ import absolute_import
+from __future__ import unicode_literals
+from builtins import str
+from builtins import map
+from builtins import object
+from future import standard_library
+standard_library.install_aliases()
+
+import os
 
 from ..exceptions import ServerException
 from ..repository.repository import Repository, RepositoryConnection
 from ...miniclient import repository as miniserver
-import re, urllib
+import re, urllib.request, urllib.parse, urllib.error
 from . import spec
+from past.builtins import basestring
 
 READ_ONLY = 'READ_ONLY'
 
@@ -26,28 +34,96 @@ class AllegroGraphServer(object):
     """
     Connects to an AllegroGraph HTTP Server
     """
-    def __init__(self, host, port=10035, user=None, password=None, cainfo=None, sslcert=None, verifyhost=None, verifypeer=None, **options):
+    def __init__(self, host=None, port=None, user=None, password=None,
+                 cainfo=None, sslcert=None, verifyhost=None, verifypeer=None,
+                 protocol=None,
+                 proxy=os.environ.get('AGRAPH_PROXY'),
+                 **options):
         """
-        Defines the connection to the AllegroGraph HTTP server.
+        Define the connection to the AllegroGraph HTTP server.
 
-        Pass either user & password for Basic Authentication or
-        cainfo, sslcert values for client x.509 certificate
-        authentication. You can optionally set verifyhost/verifypeer
-        to True or False. Default behavior is True.
+        Pass either ``user`` and ``password`` for Basic Authentication or
+        ``cainfo``, ``sslcert`` values for client X.509 certificate
+        authentication.
 
-        See pycurl documentation for the meanings of cainfo, sslcert,
-        verifyhost, verifypeer as those values are just passed 
-        through to the Curl object's setopt function.
+        :param host: Address of the AllegroGraph server to connect to.
+                     This can also include protocol and port
+                     (e.g. http://localhost:10035).
+                     The default value is ``'localhost'```.
+        :type host: string
+        :param port: Port on which the server is listening.
+                     The default is 10035 if ``protocol`` is ``'http'``
+                     and 10036 if it is ``'https'``.
+                     If passed explicitly this parameter overrides any value
+                     that might have been specified as a part of the ``host`` string.
+        :type port: int
+        :param protocol: Connection protocol, either ``'http'`` or ``'https'``.
+                         The default is ``'http'`` if no SSL parameters are set
+                         and `'https'`` otherwise.
+                         If passed explicitly this parameter overrides any value
+                         that might have been specified as a part of the ``host`` string.
+        :type protocol: string
+        :param user: Username (when using Basic authentication).
+        :type user: string
+        :param password: Password (when using Basic authentication).
+        :type password: string
+        :param cainfo: Path to a file or directory containing CA certificates that
+                       will be used to validate the server's certificate.
+        :type cainfo: string
+        :param sslcert: Client certificate path (when using SSL authentication).
+        :type sslcert: string
+        :param verifyhost: If set to ``0`` it will not be an error if the server's
+                           SSL certificate does not match the server's address.
+                           The default value is ``2``, meaning that the host name will
+                           be validated against the certificate.
+
+                           ..seealso:: https://curl.haxx.se/libcurl/c/CURLOPT_SSL_VERIFYHOST.html
+        :type verifyhost: int
+        :param verifypeer: If set to ``1`` (the default) the validity of the server's
+                           SSL certificate will be checked. Set to ``0`` to disable
+                           the validation.
+
+                           ..seealso:: https://curl.haxx.se/libcurl/c/CURLOPT_SSL_VERIFYPEER.html
+        :type verifypeer: int
+        :param proxy: Proxy specification string. The format is SCHEME://HOST:PORT.
+                      Supported schemes are 'http', 'socks4' and 'socks5'.
+                      Note that for SOCKS proxies DNS requests are performed by the
+                      proxy server.
+                      The default value is taken from the AGRAPH_PROXY environment
+                      variable.
+        :type proxy: string
+        :param options: Ignored.
         """
-        
-        if re.match('^https?://', host):
-            uri = host + ':%d'
-        elif sslcert != None:
-            uri = 'https://%s:%d'
+        # Not sure why we accept these, but don't want to change the API at this point.
+        del options
+
+        host = host or 'localhost'
+
+        # Check if other arguments were passed as a part of host
+        match = re.match(r'^(?:(?P<protocol>https?)://)?'
+                         r'(?P<host>[^:]*)(?::(?P<port>[0-9]*))?(?P<tail>.*)$',
+                         host)
+        if match:
+            if protocol is None:
+                protocol = match.group('protocol')
+            if port is None and match.group('port') is not None:
+                port = int(match.group('port'))
+            host = match.group('host')
+            tail = match.group('tail')
         else:
-            uri = 'http://%s:%d'
-        
-        self._client = miniserver.Client(uri % (host, port), user, password, cainfo, sslcert, verifyhost, verifypeer)
+            tail = ''
+
+        has_https_params = cainfo or sslcert or verifyhost is not None or verifypeer is not None
+        if protocol is None:
+            protocol = 'https' if has_https_params else 'http'
+
+        if port is None:
+            port = 10035 if protocol == 'http' else 10036
+
+        uri = '{protocol}://{host}:{port}{tail}'.format(protocol=protocol, host=host, port=port, tail=tail)
+
+        self._client = miniserver.Client(uri, user, password, cainfo, sslcert, verifyhost, verifypeer,
+                                         proxy=proxy)
 
     @property
     def url(self):
@@ -62,16 +138,16 @@ class AllegroGraphServer(object):
     def listCatalogs(self):
         catalogs = self._client.listCatalogs()
         return catalogs
-    
+
     def openCatalog(self, name=None):
         """
         Open a catalog by name. Pass None to open the root catalog.
-        """       
+        """
         # Allow for None and '' (or anything else that evaluates to False) to
         # mean the root catalog.
         if not name:
             name = None
-            
+
         cats = self.listCatalogs()
         if not name in cats:
             raise ServerException("There is no catalog named '%s' (found %s)"
@@ -131,12 +207,12 @@ class AllegroGraphServer(object):
         URL of a store), or (storename, catalogname) tuples.
         """
         def asRepoString(x):
-            if isinstance(x, str): return spec.local(x)
+            if isinstance(x, basestring): return spec.local(x)
             elif isinstance(x, tuple): return spec.local(x[0], x[1])
             elif isinstance(x, Repository): return x.getSpec()
             elif isinstance(x, RepositoryConnection): return x.getSpec()
             else: raise TypeError(str(x) + " is not a valid repository specification.")
-        return self.openSession(spec.federate(*map(asRepoString, repositories)), autocommit, lifetime, loadinitfile)
+        return self.openSession(spec.federate(*list(map(asRepoString, repositories))), autocommit, lifetime, loadinitfile)
 
     def listUsers(self):
         """
@@ -281,7 +357,7 @@ class AllegroGraphServer(object):
         that are expected.
         """
         return self._client.addRoleAccess(role, read, write, catalog, repository)
-        
+
     def deleteRoleAccess(self, role, read, write, catalog='*', repository='*'):
         """
         Revoke read/write access for a role. Accepts the same parameters as above.
@@ -386,7 +462,7 @@ class Catalog(object):
     def getName(self):
         """Return the catalog name."""
         return self._name
-    
+
     name = property(getName)
 
     def listRepositories(self):
@@ -395,16 +471,16 @@ class Catalog(object):
         this catalog.
         """
         return self.mini_catalog.listRepositories()
-    
+
     def deleteRepository(self, name):
         return self.mini_catalog.deleteRepository(name)
-    
+
     def getRepository(self, name, access_verb):
         """
         Create a mini-repository and execute a RENEW, OPEN, CREATE, or ACCESS.
         """
         access_verb = access_verb.upper()
-        name = urllib.quote_plus(name)
+        name = urllib.parse.quote_plus(name)
         exists = name in self.listRepositories();
         if access_verb == Repository.RENEW:
             if exists:

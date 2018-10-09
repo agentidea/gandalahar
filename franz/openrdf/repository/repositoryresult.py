@@ -2,15 +2,17 @@
 # -*- coding: utf-8 -*-
 # pylint: disable-msg=C0103
 
-###############################################################################
-# Copyright (c) 2006-2015 Franz Inc.
-# All rights reserved. This program and the accompanying materials
-# are made available under the terms of the Eclipse Public License v1.0
-# which accompanies this distribution, and is available at
-# http://www.eclipse.org/legal/epl-v10.html
-###############################################################################
+################################################################################
+# Copyright (c) 2006-2017 Franz Inc.  
+# All rights reserved. This program and the accompanying materials are
+# made available under the terms of the MIT License which accompanies
+# this distribution, and is available at http://opensource.org/licenses/MIT
+################################################################################
 
 from __future__ import absolute_import
+from __future__ import unicode_literals
+from future.builtins import next, object
+from past.builtins import unicode
 
 from ..model import Statement, Value
 
@@ -61,7 +63,7 @@ class RepositoryResult(object):  ## inherits IterationWrapper
         """
         pass
 
-    def next(self):
+    def __next__(self):
         """
         Return the next Statement in the answer, if there is one.  Otherwise,
         raise StopIteration exception.
@@ -72,7 +74,7 @@ class RepositoryResult(object):  ## inherits IterationWrapper
                 savedNonDuplicateSet = self.nonDuplicateSet
                 self.nonDuplicateSet = None
                 while (True):
-                    stmt = self.next()
+                    stmt = next(self)
                     if not stmt in savedNonDuplicateSet:
                         savedNonDuplicateSet.add(stmt)
                         return stmt                        
@@ -86,7 +88,7 @@ class RepositoryResult(object):  ## inherits IterationWrapper
                 stringTuple = RepositoryResult.normalize_quint(stringTuple)
             self.cursor += 1
             if self.subjectFilter and not stringTuple[0] == self.subjectFilter:
-                return self.next()
+                return next(self)
             return self._createStatement(stringTuple);
         else:
             raise StopIteration
@@ -107,7 +109,9 @@ class RepositoryResult(object):  ## inherits IterationWrapper
         order of iteration. The RepositoryResult is fully consumed and
         automatically closed by this operation.
         """
-        return self.addTo([])
+        result = []
+        self.addTo(result)
+        return result
 
     def addTo(self, collection):
         """
@@ -123,13 +127,17 @@ class RepositoryResult(object):  ## inherits IterationWrapper
     def __len__(self):
         return len(self.string_tuples)
 
+    # Python-future breaks truth testing - length is not checked...
+    def __bool__(self):
+        return len(self) > 0
+    
     def rowCount(self):
         return len(self)
     
     @staticmethod
     def normalize_quint(stringTuple):
         st = stringTuple
-        return (st[1], st[2], st[3], None if len(st) == 4 else st[4], str(st[0]))
+        return (st[1], st[2], st[3], None if len(st) == 4 else st[4], unicode(st[0]))
 
     @staticmethod
     def normalize_quad(stringTuple):

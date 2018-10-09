@@ -67,17 +67,19 @@ def get_email(id, server):
 
 
 def proc():
-    HOST = 'agentidea.com'
-    USERNAME = 'grantsteinfeld'
+    HOST = 'localhost'
+    USERNAME = 'breakingnews'
     PASSWORD = 'jy1met2'
     notAllowedSrcs = ['GRUBHUB','FACEBOOK']
     allowedSrcs = ['NYTimes.com','FoxBusiness.com','NYTimes.com News Alert']
     server = imaplib.IMAP4(HOST)  # connect
+    print server
     server.login(USERNAME, PASSWORD)  # login
     server.select('INBOX', readonly=True)  # select mailbox aka folder
 
     result, data = server.search(None, "ALL")  # search emails
-
+    print result
+    print data
     ids = data[0]  # data is a list.
     id_list = ids.split()  # ids is a space separated string
     # latest_email_id = id_list[-1] # get the latest

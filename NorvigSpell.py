@@ -1,6 +1,6 @@
 import re, collections
 class Spell:
-    def __init__(self,dictFile='/home/agentidea/dev/gandalahar/src/big.txt'):
+    def __init__(self,dictFile='/var/www/html/gandalahar/big.txt'):
         print "initialized NorvigSpell class with dictionary ", dictFile
 	try:
             self.NWORDS = self.train( self.words( file(dictFile).read()))

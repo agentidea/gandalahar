@@ -2,19 +2,25 @@
 # -*- coding: utf-8 -*-
 # pylint: disable-msg=C0103 
 
-###############################################################################
-# Copyright (c) 2006-2015 Franz Inc.
-# All rights reserved. This program and the accompanying materials
-# are made available under the terms of the Eclipse Public License v1.0
-# which accompanies this distribution, and is available at
-# http://www.eclipse.org/legal/epl-v10.html
-###############################################################################
+################################################################################
+# Copyright (c) 2006-2017 Franz Inc.  
+# All rights reserved. This program and the accompanying materials are
+# made available under the terms of the MIT License which accompanies
+# this distribution, and is available at http://opensource.org/licenses/MIT
+################################################################################
 
 from __future__ import absolute_import
+from __future__ import unicode_literals
+
+from future.utils import python_2_unicode_compatible
+from past.builtins import basestring
+from builtins import object
 
 from ..exceptions import IllegalArgumentException
 from ..util import uris, strings
 
+
+@python_2_unicode_compatible
 class Value(object):
     """
     Top class in the org.openrdf.model interfaces.
@@ -23,11 +29,39 @@ class Value(object):
     def __str__(self):
         return self.toNTriples()
 
-    def __eq__(self, other):
-        return NotImplemented
+    def get_cmp_key(self):
+        """
+        Return a key that will be used to compare and hash this object.
+        """
+        raise NotImplementedError()
 
-    # Default to not-hashable
-    __hash__ = None
+    # Comparison methods rely on get_cmp_key.
+    def __eq__(self, other):
+        return type(self) == type(other) and self.get_cmp_key() == other.get_cmp_key()
+
+    def __ne__(self, other):
+        return not self == other
+
+    def __hash__(self):
+        return hash(self.get_cmp_key())
+
+    def __lt__(self, other):
+        if type(self) == type(other):
+            return self.get_cmp_key() < other.get_cmp_key()
+        else:
+            return type(self) < type(other)
+
+    def __gt__(self, other):
+        if type(self) == type(other):
+            return self.get_cmp_key() > other.get_cmp_key()
+        else:
+            return type(self) > type(other)
+
+    def __le__(self, other):
+        return not self > other
+
+    def __ge__(self, other):
+        return not self < other
 
     def toNTriples(self):
         """
@@ -55,12 +89,9 @@ class URI(Resource):
             uri = namespace + localname
 
         self._uri = uri
-    
-    def __eq__(self, other):
-        return str(self) == str(other)
 
-    def __hash__(self):
-        return hash(self.uri)
+    def get_cmp_key(self):
+        return self.uri
     
     def getURI(self):
         """
@@ -94,8 +125,9 @@ class URI(Resource):
         Return an NTriples representation of a resource, in this case, wrap
         it in angle brackets.
         """
-        return "<%s>" % strings.encode_ntriple_string(self.uri)
-    
+        return strings.encode_ntriple_uri(self.uri)
+
+
 class BNode(Resource):
     """
     """
@@ -110,16 +142,14 @@ class BNode(Resource):
 
     getValue = getID
     
-    def __eq__(self, other):
-        return isinstance(other, BNode) and self.getId() == other.getId()
-    
-    def __hash__(self):
-        return hash(self.id)
+    def get_cmp_key(self):
+        return self.id
     
     def toNTriples(self):
         return "_:%s" % self.id
 
 
+@python_2_unicode_compatible
 class Namespace(object):
     """
     """

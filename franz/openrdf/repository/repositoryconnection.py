@@ -2,16 +2,18 @@
 # -*- coding: utf-8 -*-
 # pylint: disable-msg=C0103
 
-###############################################################################
-# Copyright (c) 2006-2015 Franz Inc.
-# All rights reserved. This program and the accompanying materials
-# are made available under the terms of the Eclipse Public License v1.0
-# which accompanies this distribution, and is available at
-# http://www.eclipse.org/legal/epl-v10.html
-###############################################################################
+################################################################################
+# Copyright (c) 2006-2017 Franz Inc.  
+# All rights reserved. This program and the accompanying materials are
+# made available under the terms of the MIT License which accompanies
+# this distribution, and is available at http://opensource.org/licenses/MIT
+################################################################################
 
 from __future__ import absolute_import
 from __future__ import with_statement
+from __future__ import unicode_literals
+from future.builtins import object
+from past.builtins import map, unicode, basestring
 
 from .repositoryresult import RepositoryResult
 
@@ -22,7 +24,6 @@ from ..query.dataset import ALL_CONTEXTS, MINI_NULL_CONTEXT
 from ..query.query import Query, TupleQuery, UpdateQuery, GraphQuery, BooleanQuery, QueryLanguage
 from ..rio.rdfformat import RDFFormat
 from ..util import uris
-from ..vocabulary import RDF, RDFS, OWL, XMLSchema
 
 try:
     from collections import namedtuple
@@ -32,8 +33,13 @@ except ImportError:
 class PrefixFormat(namedtuple('EncodedIdPrefix', 'prefix format')):
     __slots__ = ()
 
-import copy, datetime, os, sys, warnings
+import copy, sys, warnings
 from contextlib import contextmanager
+
+if sys.version_info[0] > 2:
+    # Hack for isinstance checks
+    import io
+    file = io.IOBase
 
 # RepositoryConnection is the main interface for updating data in and performing
 # queries on a repository.
@@ -45,24 +51,46 @@ from contextlib import contextmanager
 # or your local installation's tutorial/python-tutorial.html for the tutorial.
 
 class RepositoryConnection(object):
-    def __init__(self, repository):
-        self.repository = repository 
+    def __init__(self, repository, close_repo=False):
+        """
+        Call through :meth:`~franz.openrdf.repository.repository.Repository.getConnection`.
+
+        :param repository: Repository to connect to.
+        :type repository: Repository
+        :param close_repo: If ``True`` shutdown the repository when this connection is closed.
+                          The default is ``False``.
+        :type close_repo: bool
+        """
+        self.repository = repository
         self.mini_repository = repository.mini_repository
         self.is_closed = False
         self._add_commit_size = None
+        self._close_repo = close_repo
+        self.is_session_active = False
 
     def getSpec(self):
         return self.repository.getSpec()
 
     def _get_mini_repository(self):
         return self.mini_repository
-        
+
     def getValueFactory(self):
         return self.repository.getValueFactory()
-        
+
     def close(self):
-        self.is_closed = True
-    
+        """
+        Close the connection. This also closes the session if it is active.
+
+        It is safe to call this on a connection that has already been closed.
+
+        Note that using ``with`` is the preferred way to manage connections.
+        """
+        if not self.is_closed:
+            self.closeSession()
+            self.is_closed = True
+            if self._close_repo:
+                self.repository.shutDown()
+
     def setAddCommitSize(self, triple_count):
         if not triple_count or triple_count < 0:
             self._add_commit_size = None
@@ -72,11 +100,12 @@ class RepositoryConnection(object):
     def getAddCommitSize(self):
         return self._add_commit_size
 
-    add_commit_size = property(getAddCommitSize, setAddCommitSize,
-        "The threshold for commit size during triple add operations.\n"
-        "Set to 0 (zero) or None to clear size-based autocommit behavior.\n"
-        "When set to an integer triple_count > 0, loads and adds commit each\n"
-        "triple_count triples added and at the end of the triples being added.\n")
+    add_commit_size = property(
+        getAddCommitSize, setAddCommitSize,
+        doc="""The threshold for commit size during triple add operations.
+               Set to 0 (zero) or None to clear size-based autocommit behavior.
+               When set to an integer triple_count > 0, a commit will occur every
+               triple_count triples added and at the end of the triples being added.""")
 
     def prepareQuery(self, queryLanguage, queryString, baseURI=None):
         """
@@ -116,7 +145,7 @@ class RepositoryConnection(object):
         statements/quads.
         """
         query = GraphQuery(queryLanguage, queryString, baseURI=baseURI)
-        query.setConnection(self)        
+        query.setConnection(self)
         return query
 
     def prepareBooleanQuery(self, queryLanguage, queryString, baseURI=None):
@@ -128,13 +157,13 @@ class RepositoryConnection(object):
         query = BooleanQuery(queryLanguage, queryString, baseURI=baseURI)
         query.setConnection(self)
         return query
-    
+
     def getContextIDs(self):
         """
-        Return a list of context resources, one for each context referenced bya quad in 
+        Return a list of context resources, one for each context referenced bya quad in
         the triple store.  Omit the default context, since no one had the intelligence to
         make it a first-class object.
-        """                         
+        """
         contexts = []
         for cxt in self._get_mini_repository().listContexts():
             contexts.append(self.createURI(cxt))
@@ -162,7 +191,7 @@ class RepositoryConnection(object):
         statements.
         """
         return self.size() == 0
-    
+
     def _context_to_ntriples(self, context, none_is_mini_null=False):
         if context is None:
             return MINI_NULL_CONTEXT if none_is_mini_null else None
@@ -179,8 +208,8 @@ class RepositoryConnection(object):
         if none_is_mini_null:
             return MINI_NULL_CONTEXT
 
-        return None            
-       
+        return None
+
     def _contexts_to_ntriple_contexts(self, contexts, none_is_mini_null=False):
         """
         Do three transformations here.  Convert from context object(s) to
@@ -211,7 +240,7 @@ class RepositoryConnection(object):
         If 'term' is a CompoundLiteral or a list or tuple, separate out the second
         value, ntriplize it, and return a binary tuple.
         TODO: FIGURE OUT HOW COORDINATE PAIRS WILL WORK HERE
-        """ 
+        """
         if isinstance(term, GeoSpatialRegion): return term
         factory = self.getValueFactory()
         if isinstance(term, GeoCoordinate):
@@ -236,7 +265,7 @@ class RepositoryConnection(object):
             beginTerm = factory.object_position_term_to_openrdf_term(term[0])
             factory.validateRangeConstant(beginTerm, predicate_for_object)
             endTerm = factory.object_position_term_to_openrdf_term(term[1])
-            factory.validateRangeConstant(endTerm, predicate_for_object)            
+            factory.validateRangeConstant(endTerm, predicate_for_object)
             return (self._to_ntriples(beginTerm), self._to_ntriples(endTerm))
         ## END OBSOLETE
         elif predicate_for_object:
@@ -244,7 +273,7 @@ class RepositoryConnection(object):
             return self._to_ntriples(term)
         else:
             return self._to_ntriples(term)
-    
+
     def getStatements(self, subject, predicate,  object, contexts=ALL_CONTEXTS, includeInferred=False,
                        limit=None, offset=None, tripleIDs=False):
         """
@@ -270,7 +299,7 @@ class RepositoryConnection(object):
         """
         stringTuples = self._get_mini_repository().getStatementsById(ids)
         return RepositoryResult(stringTuples, tripleIDs=False)
-    
+
     def _getStatementsInRegion(self, subject, predicate,  region, contexts, limit=None, offset=None):
         geoType = region.geoType
         miniGeoType = geoType._getMiniGeoType()
@@ -297,8 +326,9 @@ class RepositoryConnection(object):
                                         self._convert_term_to_mini_term(region.getResource()),
                                         limit=limit, offset=offset)
         else: pass ## can't happen
-        return RepositoryResult(stringTuples, subjectFilter=subject)            
-    
+        return RepositoryResult(stringTuples, subjectFilter=subject)
+
+    # NOTE: 'format' shadows a built-in symbol but it is too late to change the public API
     def add(self, arg0, arg1=None, arg2=None, contexts=None, base=None, format=None, serverSide=False):
         """
         Calls addTriple, addStatement, or addFile.  If 'contexts' is not
@@ -306,7 +336,7 @@ class RepositoryConnection(object):
         """
         if contexts and not isinstance(contexts, list):
             contexts = [contexts]
-        if isinstance(arg0, (str, file)):
+        if isinstance(arg0, (basestring, file)):
             if contexts:
                 if len(contexts) > 1:
                     raise IllegalArgumentException("Only one context may be specified when loading from a file.")
@@ -323,12 +353,18 @@ class RepositoryConnection(object):
                 self.addStatement(s, contexts=contexts)
         else:
             raise IllegalArgumentException("Illegal first argument to 'add'.  Expected a Value, Statement, File, or string.")
-            
-    def addFile(self, filePath, base=None, format=None, context=None, serverSide=False):
+
+    # NOTE: 'format' shadows a built-in symbol but it is too late to change the public API
+    def addFile(self, filePath, base=None, format=None, context=None, serverSide=False, content_encoding=None):
         """
-        Load the file or file path 'filePath' into the store.  'base' optionally defines a base URI,
-        'format' is RDFFormat.NTRIPLES or RDFFormat.RDFXML, and 'context' optionally specifies
-        which context the triples will be loaded into.
+        Load the file or file path 'filePath' into the store. 
+        'base' optionally defines a base URI,
+        'format' is an RDFFormat (e.g. RDFFormat.NTRIPLES) or None 
+        (will be guessed from the extension of filePath), and 'context'
+        optionally specifies which context the triples will be loaded into.
+        GZIP-compressed files can be loaded by passing 'gzip' as the value
+        of 'content_encoding'. This is only required if the file extension
+        is not '.gz'.
         """
         if isinstance(context, (list, tuple)):
             if len(context) > 1:
@@ -336,54 +372,58 @@ class RepositoryConnection(object):
             context = context[0] if context else None
         contextString = self._context_to_ntriples(context, none_is_mini_null=True)
 
-        if isinstance(filePath, file):
-            filePath = os.path.abspath(filePath.name)
-        elif isinstance(filePath, basestring):
-            fileDrive = os.path.splitdrive(filePath)[0]
-            if not filePath.startswith('/') and not fileDrive and not filePath[:5].lower() == "http:":
-                ## looks like its a relative file path; test to see if there is a local file that matches.
-                ## If so, generate an absolute path name to enable AG server to read it:
-                testPath = os.path.abspath(os.path.expanduser(filePath))
-                if os.path.exists(testPath):
-                    filePath = testPath
-        fileExt = os.path.splitext(filePath)[1].lower()
-        if format == RDFFormat.NTRIPLES or fileExt in ['.nt', '.ntriples']:
-            self._get_mini_repository().loadFile(filePath, 'ntriples', context=contextString, serverSide=serverSide,
-                commitEvery=self.add_commit_size)
-        elif format == RDFFormat.RDFXML or fileExt in ['.rdf', '.owl']:
-            self._get_mini_repository().loadFile(filePath, 'rdf/xml', context=contextString, baseURI=base,
-                serverSide=serverSide, commitEvery=self.add_commit_size)
-        else:
-            raise Exception("Failed to specify a format for the file '%s'." % filePath)
-        
+        fmt, ce = RDFFormat.rdf_format_for_file_name(filePath)
+        format = format or fmt
+        content_encoding = content_encoding or ce
+    
+        self._get_mini_repository().loadFile(
+            filePath, format, context=contextString, serverSide=serverSide,
+            commitEvery=self.add_commit_size, baseURI=base,
+            content_encoding=content_encoding)
+
+    def addData(self, data, rdf_format=RDFFormat.TURTLE, base_uri=None, context=None):
+        """
+        Adds data from a string to the repository.
+
+        :param data: Data to be added.
+        :param rdf_format: Data format.
+        :type rdf_format: RDFFormat
+        :param base_uri: Base for resolving relative URIs.
+                         If None (default), the URI will be chosen by the server.
+        :param context: Graph to add the data to.
+                        If None (default) the default graph will be used..
+        """
+        self._get_mini_repository().loadData(
+            data, rdf_format, base_uri=base_uri, context=context)
+
     def addTriple(self, subject, predicate, object, contexts=None):
         """
         Add the supplied triple of values to this repository, optionally to
-        one or more named contexts.        
-        """ 
+        one or more named contexts.
+        """
         obj = self.getValueFactory().object_position_term_to_openrdf_term(object, predicate=predicate)
         cxts = self._contexts_to_ntriple_contexts(contexts, none_is_mini_null=True)
         for cxt in cxts:
             self._get_mini_repository().addStatement(self._to_ntriples(subject), self._to_ntriples(predicate),
                         self._convert_term_to_mini_term(obj), cxt)
-        
+
     def _to_ntriples(self, term):
         """
         If 'term' is an OpenRDF term, convert it to a string.  If its already
         a string; assume its in ntriples format, and just pass it through.
         """
         if not term: return term
-        elif isinstance(term, str): 
+        elif isinstance(term, basestring):
             return term
         else: return term.toNTriples();
-        
+
     def addTriples(self, triples_or_quads, context=ALL_CONTEXTS, ntriples=False):
         """
         Add the supplied triples or quads to this repository.  Each triple can
-        be a list or a tuple of Values.   If 'context' is set, then 
+        be a list or a tuple of Values.   If 'context' is set, then
         the context is substituted in for each triple.  If 'ntriples' is True,
         then the triples or quads are assumed to contain valid ntriples strings,
-        and they are passed to the server with no conversion.        
+        and they are passed to the server with no conversion.
         """
         ntripleContexts = self._contexts_to_ntriple_contexts(context, none_is_mini_null=True)
         quads = []
@@ -411,13 +451,13 @@ class RepositoryConnection(object):
                 quad[3] = self._to_ntriples(q.getContext()) if isQuad and q.getContext() else ntripleContexts
             quads.append(quad)
         self._get_mini_repository().addStatements(quads, commitEvery=self.add_commit_size)
-                
+
     def addStatement(self, statement, contexts=None):
         """
         Add the supplied statement to the specified contexts in the repository.
-        """        
+        """
         self.addTriple(statement.getSubject(), statement.getPredicate(), statement.getObject(),
-                       contexts=contexts)      
+                       contexts=contexts)
 
     def remove(self, arg0, arg1=None, arg2=None, contexts=None):
         """
@@ -442,7 +482,7 @@ class RepositoryConnection(object):
         subj = self._to_ntriples(subject)
         pred = self._to_ntriples(predicate)
         obj = self._to_ntriples(self.getValueFactory().object_position_term_to_openrdf_term(object))
-        ntripleContexts = self._contexts_to_ntriple_contexts(contexts, none_is_mini_null=True)   
+        ntripleContexts = self._contexts_to_ntriple_contexts(contexts, none_is_mini_null=True)
         if ntripleContexts is None or len(ntripleContexts) == 0:
             self._get_mini_repository().deleteMatchingStatements(subj, pred, obj, None)
         else:
@@ -454,7 +494,7 @@ class RepositoryConnection(object):
         Remove enumerated quads from this repository.  Each quad can
         be a list or a tuple of Values.   If 'ntriples' is True,
         then the  quads are assumed to contain valid ntriples strings,
-        and they are passed to the server with no conversion.        
+        and they are passed to the server with no conversion.
         """
         removeQuads = []
         for q in quads:
@@ -487,7 +527,7 @@ class RepositoryConnection(object):
         Remove all quads with matching IDs.
         """
         self._get_mini_repository().deleteStatementsById(tids)
-   
+
     def removeStatement(self, statement, contexts=None):
         """
         Removes the supplied statement(s) from the specified contexts in the repository.
@@ -500,26 +540,26 @@ class RepositoryConnection(object):
         'contexts' is ALL_CONTEXTS, clears the repository of all statements.
         """
         self.removeTriples(None, None, None, contexts=contexts)
-         
+
     def export(self, handler, contexts=ALL_CONTEXTS):
         """
         Exports all explicit statements in the specified contexts to the supplied
         RDFHandler.
         """
-        
+
         warnings.warn("export is deprecated. Use saveResponse instead.", DeprecationWarning, stacklevel=2)
         self.exportStatements(None, None, None, False, handler, contexts=contexts)
 
     def exportStatements(self, subj, pred, obj, includeInferred, handler, contexts=ALL_CONTEXTS):
         """
         Exports all statements with a specific subject, predicate and/or object
-        from the repository, optionally from the specified contexts.        
+        from the repository, optionally from the specified contexts.
         """
         warnings.warn("exportStatements is deprecated. Use saveResponse instead.", DeprecationWarning, stacklevel=2)
         def doit(fileobj):
             with self.saveResponse(fileobj, handler.getRDFFormat().mime_types[0]):
                 self.getStatements(subj, pred, obj, contexts, includeInferred=includeInferred)
-            
+
         if handler.getFilePath() is None:
             doit(sys.stdout)
         else:
@@ -577,7 +617,7 @@ class RepositoryConnection(object):
     ## Added here because its inconvenient to have to dispatch from three different objects
     ## (connection, repository, and value factory) when one will do
     #############################################################################################
-    
+
     def registerDatatypeMapping(self, predicate=None, datatype=None, nativeType=None):
         return self.repository.registerDatatypeMapping(predicate=predicate, datatype=datatype, nativeType=nativeType)
 
@@ -587,7 +627,7 @@ class RepositoryConnection(object):
         should be a URI, in which case 'value' should be a string.
         """
         return self.getValueFactory().createLiteral(value, datatype=datatype, language=language)
-    
+
     def createURI(self, uri=None, namespace=None, localname=None):
         """
         Creates a new URI from the supplied string-representation(s).
@@ -595,7 +635,7 @@ class RepositoryConnection(object):
         namespace/localname pair.
         """
         return self.getValueFactory().createURI(uri=uri, namespace=namespace, localname=localname)
-    
+
     def createBNode(self, nodeID=None):
         return self.getValueFactory().createBNode(nodeID=nodeID)
 
@@ -605,14 +645,14 @@ class RepositoryConnection(object):
         and associated context.  Arguments have type Resource, URI, Value, and Resource.
         """
         return self.getValueFactory().createStatement(subject, predicate, object, context=context)
-    
+
     def createRange(self, lowerBound, upperBound):
         return self.getValueFactory().createRange(lowerBound=lowerBound, upperBound=upperBound)
 
     def addRules(self, rules, language=QueryLanguage.PROLOG):
         """
         Add a sequence of one or more rules (in ASCII format) to the current environment.
-        If the language is Prolog, rule declarations start with '<-' or '<--'.  The 
+        If the language is Prolog, rule declarations start with '<-' or '<--'.  The
         former appends a new rule; the latter overwrites any rule with the same predicate.
 
         For use with an open session.
@@ -621,12 +661,12 @@ class RepositoryConnection(object):
             self._get_mini_repository().definePrologFunctors(rules)
         else:
             raise Exception("Cannot add a rule because the rule language has not been set.")
-        
+
     def loadRules(self, filename, language=QueryLanguage.PROLOG):
         """
         Load a file of rules into the current environment.
         'file' is assumed to reside on the client machine.
-        If the language is Prolog, rule declarations start with '<-' or '<--'.  The 
+        If the language is Prolog, rule declarations start with '<-' or '<--'.  The
         former appends a new rule; the latter overwrites any rule with the same predicate.
 
         For use with an open session.
@@ -634,11 +674,11 @@ class RepositoryConnection(object):
         with open(filename) as _file:
             body = _file.read()
         self.addRules(body, language)
-        
+
     #############################################################################################
     ## Server-side implementation of namespaces
     #############################################################################################
-      
+
     def getNamespaces(self):
         """
         Get all declared prefix/namespace pairs
@@ -646,7 +686,7 @@ class RepositoryConnection(object):
         namespaces = {}
         for pair in self._get_mini_repository().listNamespaces():
             namespaces[pair['prefix']] = pair['namespace']
-        return namespaces        
+        return namespaces
 
     def getNamespace(self, prefix):
         """
@@ -678,37 +718,37 @@ class RepositoryConnection(object):
     #############################################################################################
     ## Geo-spatial
     #############################################################################################
-    
+
     def createRectangularSystem(self, scale=1, unit=None, xMin=0, xMax=None, yMin=0, yMax=None):
         self.geoType = GeoType(GeoType.Cartesian, scale=scale, unit=unit, xMin=xMin, xMax=xMax, yMin=yMin, yMax=yMax)
                                ##,latMin=None, latMax=None, longMin=None, longMax=None)
-        self.geoType.setConnection(self)        
+        self.geoType.setConnection(self)
         return self.geoType
-    
+
     def createLatLongSystem(self, unit='degree', scale=None, latMin=None, latMax=None, longMin=None, longMax=None):
         self.geoType = GeoType(GeoType.Spherical, unit=unit, scale=scale, latMin=latMin, latMax=latMax, longMin=longMin, longMax=longMax)
         self.geoType.setConnection(self)
         return self.geoType
-    
+
     def getGeoType(self):
         return self.geoType
-    
+
     def setGeoType(self, geoType):
         self.geoType = geoType
         geoType.setConnection(self)
-        
-    def createCoordinate(self, x=None, y=None, lat=None, long=None):
+
+    def createCoordinate(self, x=None, y=None, latitude=None, longitude=None):
         """
         Create an x, y  or lat, long  coordinate in the current coordinate system.
         """
-        return self.geoType.createCoordinate(x=x, y=y, lat=lat, long=long)
-    
+        return self.geoType.createCoordinate(x=x, y=y, latitude=latitude, longitude=longitude)
+
     def createBox(self, xMin=None, xMax=None, yMin=None, yMax=None):
         """
         Define a rectangular region for the current coordinate system.
         """
         return self.geoType.createBox(xMin=xMin, xMax=xMax, yMin=yMin, yMax=yMax)
-    
+
     def createCircle(self, x, y, radius, unit=None):
         """
         Define a circular region with vertex x,y and radius "radius".
@@ -716,7 +756,7 @@ class RepositoryConnection(object):
         for the current system.
         """
         return self.geoType.createCircle(x, y, radius, unit=unit)
-    
+
     def createPolygon(self, vertices, uri=None, geoType=None):
         """
         Define a polygonal region with the specified vertices.  'vertices'
@@ -727,12 +767,12 @@ class RepositoryConnection(object):
     #############################################################################################
     ## SNA   Social Network Analysis Methods
     #############################################################################################
-    
+
     def registerSNAGenerator(self, name, subjectOf=None, objectOf=None, undirected=None, generator_query=None):
         """
         Create (and remember) a generator named 'name'.
         If one already exists with the same name; redefine it.
-        'subjectOf', 'objectOf' and 'undirected' expect a list of predicate URIs, expressed as 
+        'subjectOf', 'objectOf' and 'undirected' expect a list of predicate URIs, expressed as
         fullURIs or qnames, that define the edges traversed by the generator.
         Alternatively, instead of an adjacency map, one may provide a 'generator_query',
         that defines the edges.
@@ -740,7 +780,7 @@ class RepositoryConnection(object):
         For use with an open session.
         """
         miniRep = self._get_mini_repository()
-        miniRep.registerSNAGenerator(name, subjectOf=subjectOf, objectOf=objectOf, undirected=undirected, 
+        miniRep.registerSNAGenerator(name, subjectOf=subjectOf, objectOf=objectOf, undirected=undirected,
                                      query=generator_query)
 
     def registerNeighborMatrix(self, name, generator, group_uris, max_depth=2):
@@ -786,8 +826,8 @@ class RepositoryConnection(object):
 
         See  http://www.franz.com/agraph/support/documentation/v5/http-protocol.html#put-freetext-index
         """
-        if predicates: predicates = map(uris.asURIString, predicates)
-        if isinstance(indexLiterals, list): indexLiterals = map(uris.asURIString, indexLiterals)
+        if predicates: predicates = list(map(uris.asURIString, predicates))
+        if isinstance(indexLiterals, list): indexLiterals = list(map(uris.asURIString, indexLiterals))
         self.mini_repository.createFreeTextIndex(name, predicates=predicates, indexLiterals = indexLiterals,
                                                  indexResources=indexResources, indexFields=indexFields,
                                                  minimumWordSize=minimumWordSize, stopWords=stopWords,
@@ -797,8 +837,8 @@ class RepositoryConnection(object):
     def modifyFreeTextIndex(self, name, predicates=None, indexLiterals=None, indexResources=None,
                             indexFields=None, minimumWordSize=None, stopWords=None, wordFilters=None,
                             reIndex=None, innerChars=None, borderChars=None, tokenizer=None):
-        if predicates: predicates = map(uris.asURIString, predicates)
-        if isinstance(indexLiterals, list): indexLiterals = map(uris.asURIString, indexLiterals)
+        if predicates: predicates = list(map(uris.asURIString, predicates))
+        if isinstance(indexLiterals, list): indexLiterals = list(map(uris.asURIString, indexLiterals))
         self.mini_repository.modifyFreeTextIndex(name, predicates=predicates, indexLiterals = indexLiterals,
                                                  indexResources=indexResources, indexFields=indexFields,
                                                  minimumWordSize=minimumWordSize, stopWords=stopWords,
@@ -810,9 +850,9 @@ class RepositoryConnection(object):
 
     def getFreeTextIndexConfiguration(self, name):
         value = self.mini_repository.getFreeTextIndexConfiguration(name)
-        value["predicates"] = map(URI, value["predicates"])
+        value["predicates"] = list(map(URI, value["predicates"]))
         if isinstance(value["indexLiterals"], list):
-            value["indexLiterals"] = map(URI, value["indexLiterals"])
+            value["indexLiterals"] = list(map(URI, value["indexLiterals"]))
         return value
 
     def evalFreeTextSearch(self, pattern, infer=False, callback=None, limit=None, offset=None, index=None):
@@ -821,36 +861,63 @@ class RepositoryConnection(object):
         """
         miniRep = self._get_mini_repository()
         return miniRep.evalFreeTextSearch(pattern, index, infer, callback, limit, offset=offset)
-        
+
     def openSession(self, autocommit=False, lifetime=None, loadinitfile=False):
         """
         Open a session.
 
-        If autocommit is True, commits are done on each request, otherwise
-        you will need to call commit() or rollback() as appropriate for your
-        application.
+        It is not an error to call this when a session is already active on this connection,
+        but no new session will be created (i.e. nested sessions are not supported).
 
-        lifetime is an integer specifying the time to live in seconds of 
-        the session.
+        .. seealso::
 
-        If loadinitfile is True, then the current initfile will be loaded
-        for you when the session starts.
+           http://franz.com/agraph/support/documentation/current/http-protocol.html#sessions
+              More detailed explanation of session-related concepts in the HTTP API reference.
+
+        :param autocommit: if ``True``, commits are done on each request, otherwise
+                           you will need to call :meth:`.commit` or :meth:`.rollback`
+                           as appropriate for your application.
+                           The default value is ``False``.
+        :type autocommit: bool
+        :param lifetime: Time (in seconds) before the session expires when idle.
+                         Note that the client maintains a thread that pings the
+                         session before this happens.
+                         The maximum acceptable value is 21600 (6 hours).
+                         When the value is ``None`` (the default) the lifetime
+                         is set to 300 seconds (5 minutes).
+        :type lifetime: int
+        :param loadinitfile: if ``True`` then the current initfile will be loaded
+                             for you when the session starts. The default is ``False``.
+        :type loadinitfile: bool
         """
-        miniRep = self._get_mini_repository()
-        if miniRep == self.repository.mini_repository:
-            # Don't use the shared mini_repository for a session
-            miniRep = self.mini_repository = copy.copy(self.repository.mini_repository)
+        if not self.is_session_active:
+            miniRep = self._get_mini_repository()
+            if miniRep == self.repository.mini_repository:
+                # Don't use the shared mini_repository for a session
+                miniRep = self.mini_repository = copy.copy(self.repository.mini_repository)
 
-        return miniRep.openSession(autocommit, lifetime, loadinitfile)
+            miniRep.openSession(autocommit, lifetime, loadinitfile)
+            self.is_session_active = True
 
     def closeSession(self):
         """
         Close a session.
+
+        It is not an error to call this when no session is active.
         """
-        # Keeping the clone of the mini_repository is fine in case the user
-        # calls openSession again.
-        miniRep = self._get_mini_repository()
-        return miniRep.closeSession()
+        if self.is_session_active:
+            # Not deleting the dedicated mini_repository in case the user
+            # calls openSession again.
+            self._get_mini_repository().closeSession()
+            self.is_session_active = False
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        del args
+        self.closeSession()
+        self.close()
 
     @contextmanager
     def session(self,  autocommit=False, lifetime=None, loadinitfile=False):
@@ -867,7 +934,7 @@ class RepositoryConnection(object):
         you will need to call commit() or rollback() as appropriate for your
         application.
 
-        lifetime is an integer specifying the time to live in seconds of 
+        lifetime is an integer specifying the time to live in seconds of
         the session.
 
         If loadinitfile is True, then the current initfile will be loaded
@@ -883,7 +950,7 @@ class RepositoryConnection(object):
         Only for use as a superuser during a session.
 
         Runs requests on this connection as username.
-        
+
         None - the default - clears the setting.
         """
         return self._get_mini_repository().runAsUser(username)
@@ -893,13 +960,13 @@ class RepositoryConnection(object):
         """
         Save the server response(s) for the call(s) within the with statement
         to fileobj, using accept for the response type requested.
- 
+
         Responses will be uncompressed and saved to fileobj, but not decoded.
         Therefore, the API called will likely error out shortly after the
         response is saved (which is okay because we really only want
         the side-effect of saving the response).
 
-        RequestError is always thrown on errors from the server.  
+        RequestError is always thrown on errors from the server.
         Other exceptions can be optionally raised with raiseAll=True.
 
         You will only want to make only one conn call in the with statement
@@ -943,6 +1010,7 @@ class RepositoryConnection(object):
         """
         return self._get_mini_repository().evalJavaScript(code)
 
+    # NOTE: 'format' shadows a built-in symbol but it is too late to change the public API
     def registerEncodedIdPrefix(self, prefix, format):
         """
         Registers a single encoded prefix.
@@ -991,7 +1059,7 @@ class RepositoryConnection(object):
         format specifier.
 
         See notes on next-encoded-upi-for-prefix in:
-        
+
         http://franz.com/agraph/support/documentation/v5/encoded-ids.html
         """
         return self._get_mini_repository().allocateEncodedIds(prefix, amount)
@@ -999,7 +1067,7 @@ class RepositoryConnection(object):
     def deleteDuplicates(self, mode):
         """
         Delete all duplicates in the store. Must commit.
-        
+
         mode - "spog" or "spo"
 
         For details see:
@@ -1011,7 +1079,7 @@ class RepositoryConnection(object):
     def getDuplicateStatements(self, mode):
         """
         Return all duplicates in the store. Must commit.
-        
+
         mode - "spog" or "spo", specifies how duplicates are determined
 
         For details see:
@@ -1105,7 +1173,7 @@ class RepositoryConnection(object):
         return self._get_mini_repository().deleteMaterialized()
 
 
-class GeoType:
+class GeoType(object):
     Cartesian = 'CARTESIAN'
     Spherical = 'SPHERICAL'
     def __init__(self, system, scale=None, unit=None, xMin=None, xMax=None, yMin=None, yMax=None, latMin=None, latMax=None, longMin=None, longMax=None):
@@ -1126,26 +1194,26 @@ class GeoType:
             if unit:
                 raise Exception("Units not yet supported for rectangular coordinates.")
         else: pass  ## can't happen
-    
+
     def setConnection(self, connection): self.connection = connection
-        
+
     def _getMiniGeoType(self):
-        def stringify(term): return str(term) if term is not None else None
+        def stringify(term): return unicode(term) if term is not None else None
         if not self.miniGeoType:
             if self.system == GeoType.Cartesian:
                 self.miniGeoType = self.connection._get_mini_repository().getCartesianGeoType(stringify(self.scale), stringify(self.xMin), stringify(self.xMax),
                                                                                 stringify(self.yMin), stringify(self.yMax))
             elif self.system == GeoType.Spherical:
-                self.miniGeoType = self.connection._get_mini_repository().getSphericalGeoType(stringify(self.scale), unit=stringify(self.unit), 
+                self.miniGeoType = self.connection._get_mini_repository().getSphericalGeoType(stringify(self.scale), unit=stringify(self.unit),
                                 latMin=stringify(self.latMin), latMax=stringify(self.latMax), longMin=stringify(self.longMin), longMax=stringify(self.longMax))
         return self.miniGeoType
 
-    def createCoordinate(self, x=None, y=None, lat=None, long=None, unit=None):
+    def createCoordinate(self, x=None, y=None, latitude=None, longitude=None, unit=None):
         """
-        Create an x, y  or lat, long  coordinate for the system defined by this geotype. 
+        Create an x, y  or lat, long  coordinate for the system defined by this geotype.
         """
-        return GeoCoordinate(x=(x or lat), y=y or long, unit=unit, geoType=self)
-    
+        return GeoCoordinate(x=(x or latitude), y=y or longitude, unit=unit, geoType=self)
+
     def createBox(self, xMin=None, xMax=None, yMin=None, yMax=None, unit=None):
         """
         Define a rectangular region for the current coordinate system.

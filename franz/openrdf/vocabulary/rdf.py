@@ -2,21 +2,25 @@
 # -*- coding: utf-8 -*-
 # pylint: disable-msg=C0103
 
-###############################################################################
-# Copyright (c) 2006-2015 Franz Inc.
-# All rights reserved. This program and the accompanying materials
-# are made available under the terms of the Eclipse Public License v1.0
-# which accompanies this distribution, and is available at
-# http://www.eclipse.org/legal/epl-v10.html
-###############################################################################
+################################################################################
+# Copyright (c) 2006-2017 Franz Inc.  
+# All rights reserved. This program and the accompanying materials are
+# made available under the terms of the MIT License which accompanies
+# this distribution, and is available at http://opensource.org/licenses/MIT
+################################################################################
 
 from __future__ import absolute_import
+from __future__ import unicode_literals
+from future.builtins import object
+from past.builtins import unicode
+
+from future.utils import iteritems
 
 from ..model.value import URI
 
 NS = "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
 
-class RDF:
+class RDF(object):
     """
     A 'static' class containing useful RDF URIs.
     """
@@ -42,8 +46,8 @@ class RDF:
     ## map of uri strings to URI objects:
     uristr2obj = {}
 
-for name, uri in RDF.__dict__.iteritems():
+for name, uri in iteritems(RDF.__dict__):
     if name.upper() == name:
-        RDF.uristr2obj[str(uri)] = uri
+        RDF.uristr2obj[unicode(uri)] = uri
 
 del RDF.uristr2obj[NS]

@@ -3,8 +3,8 @@ import requests
 import json
 
 urlNews = 'http://agentidea.com:80/api/news/breakingnews'
-urlGet = 'https://hooks.slack.com/services/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'
-
+#urlGet = 'https://hooks.slack.com/services/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'
+urlGet = 'https://hooks.slack.com/services/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'
 def sendPayload(msg):
         payload = {
                 "username":"pynewsbot",
@@ -21,7 +21,7 @@ col=[]
 r = requests.get(urlNews)
 data = r.json()
 for d in data:
-        if d['src'] != 'Facebook':
+        if 'src' in d and d['src'] != 'Facebook':
                 if 'BREAKING' in d['subject']:
                         sub = d['subject'].replace("BREAKING",'')
                         sub = sub.replace("NEWS",'')

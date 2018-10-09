@@ -1,20 +1,25 @@
+from __future__ import unicode_literals
+from builtins import str
+from builtins import object
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 # pylint: disable-msg=C0103
 
-###############################################################################
-# Copyright (c) 2006-2015 Franz Inc.
-# All rights reserved. This program and the accompanying materials
-# are made available under the terms of the Eclipse Public License v1.0
-# which accompanies this distribution, and is available at
-# http://www.eclipse.org/legal/epl-v10.html
-###############################################################################
-
+################################################################################
+# Copyright (c) 2006-2017 Franz Inc.  
+# All rights reserved. This program and the accompanying materials are
+# made available under the terms of the MIT License which accompanies
+# this distribution, and is available at http://opensource.org/licenses/MIT
+################################################################################
+from future.utils import python_2_unicode_compatible
+from past.builtins import unicode
 
 ALL_CONTEXTS = 'ALL_CONTEXTS'
 MINI_NULL_CONTEXT = 'null'
 
-class Dataset:
+
+@python_2_unicode_compatible
+class Dataset(object):
     """
     Records a set of default and named graphs that can restrict 
     the scope of a query.    
@@ -69,7 +74,7 @@ class Dataset:
         try:
             uriString = uri.uri
         except AttributeError:
-            uriString = str(uri)
+            uriString = unicode(uri)
 
         if len(uriString) > 50:
             sb.append("<" + uriString[:19] + "..")

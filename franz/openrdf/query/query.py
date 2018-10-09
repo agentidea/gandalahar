@@ -2,22 +2,27 @@
 # -*- coding: utf-8 -*-
 # pylint: disable-msg=C0103
 
-###############################################################################
-# Copyright (c) 2006-2015 Franz Inc.
-# All rights reserved. This program and the accompanying materials
-# are made available under the terms of the Eclipse Public License v1.0
-# which accompanies this distribution, and is available at
-# http://www.eclipse.org/legal/epl-v10.html
-###############################################################################
+################################################################################
+# Copyright (c) 2006-2017 Franz Inc.  
+# All rights reserved. This program and the accompanying materials are
+# made available under the terms of the MIT License which accompanies
+# this distribution, and is available at http://opensource.org/licenses/MIT
+################################################################################
 
 from __future__ import absolute_import
+from __future__ import unicode_literals
+from future.builtins import object
+from past.builtins import basestring
+
+from future.utils import iteritems, python_2_unicode_compatible
 
 from ..exceptions import IllegalOptionException, QueryMissingFeatureException
 from .dataset import ALL_CONTEXTS, Dataset
 from .queryresult import GraphQueryResult, TupleQueryResult
-import datetime
 
-class QueryLanguage:
+
+@python_2_unicode_compatible
+class QueryLanguage(object):
     registered_languages = []
     SPARQL = None
     PROLOG = None
@@ -80,13 +85,13 @@ class Query(object):
         Binds the specified variable to the supplied value. Any value that was
         previously bound to the specified value will be overwritten.
         """
-        if isinstance(value, str):
+        if isinstance(value, basestring):
             value = self._get_connection().createLiteral(value)
         self.bindings[name] = value
         
     def setBindings(self, dict):
         if not dict: return
-        for key, value in dict.iteritems():
+        for key, value in iteritems(dict):
             self.setBinding(key, value)
 
     def removeBinding(self, name):
@@ -122,7 +127,7 @@ class Query(object):
         if not contexts: return
         ds = Dataset()
         for cxt in contexts:
-            if isinstance(cxt, str): cxt = self._get_connection().createURI(cxt)
+            if isinstance(cxt, basestring): cxt = self._get_connection().createURI(cxt)
             ds.addNamedGraph(cxt)
         self.setDataset(ds)
      
@@ -177,7 +182,7 @@ class Query(object):
         bindings = None
         if self.bindings:
             bindings = {}
-            for vbl, val in self.bindings.items():
+            for vbl, val in list(self.bindings.items()):
                 bindings[vbl] = conn._convert_term_to_mini_term(val)
         mini = conn._get_mini_repository()
         if self.queryLanguage == QueryLanguage.SPARQL:  

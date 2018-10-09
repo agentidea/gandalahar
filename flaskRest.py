@@ -1,20 +1,20 @@
 from flask import Flask, request, Response
-from flask.ext.restplus import Api, Resource, fields
-from flask.ext.cors import CORS
+from flask_restplus import Api, Resource, fields
+from flask_cors import CORS
 from query import *
 from mailnewsparse import proc as getBreakingNews
-from midsummer import getPlayers
 from NorvigSpell import Spell
 import sys
 import os.path
 from datetime import datetime
 import pprint
+from hamlet import getPlayers
+
+from lookNews import Neo
 
 here = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, here)
 
-srcPth = os.path.dirname(__file__) + '/src'
-sys.path.append(srcPth)
 
 app = Flask(__name__)
 cors = CORS(app)
@@ -186,12 +186,12 @@ class TripleLUL(Resource):
         return ret
 
 
-@naturalLanguage.route('/midsummer')
+@naturalLanguage.route('/play/<title>')
 class Midsummer(Resource):
-    def get(self):
+    def get(self,title):
         ret = None
         try:
-            ret = getPlayers()
+            ret = getPlayers(title)
         except Exception as exp:
             ret = exp.message
 
@@ -253,11 +253,18 @@ class Story(Resource):
     def post(self):
         api.abort(403)
 
+@newsNS.route('/today/<daysBack>')
+class NewsSpan(Resource):
+    def get(self, daysBack):
+        return Neo().get_nodes(daysBack)
+
+    def post(self):
+        api.abort(403)
 
 @newsNS.route('/breakingnews')
 class BreakingNews(Resource):
     def get(self):
-        return getBreakingNews()
+        return Neo().get_nodes() 
 
     def post(self):
         api.abort(403)
@@ -270,6 +277,27 @@ class Tim(Resource):
             return "time is {}".format(timestamp_)
         else:
             api.abort(int(code))
+
+
+@debugNS.route('/req')
+class Reqq(Resource):
+    def get(self):
+        timestamp_=str(datetime.now())
+        h = request.headers
+        for h_ in h:
+            print h_
+
+	return 11
+
+
+
+
+
+
+
+
+
+
 
 
 if __name__ == '__main__':

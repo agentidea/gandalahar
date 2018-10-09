@@ -2,15 +2,16 @@
 # -*- coding: utf-8 -*-
 # pylint: disable-msg=C0103
 
-###############################################################################
-# Copyright (c) 2006-2015 Franz Inc.
-# All rights reserved. This program and the accompanying materials
-# are made available under the terms of the Eclipse Public License v1.0
-# which accompanies this distribution, and is available at
-# http://www.eclipse.org/legal/epl-v10.html
-###############################################################################
+################################################################################
+# Copyright (c) 2006-2017 Franz Inc.  
+# All rights reserved. This program and the accompanying materials are
+# made available under the terms of the MIT License which accompanies
+# this distribution, and is available at http://opensource.org/licenses/MIT
+################################################################################
 
 from __future__ import absolute_import
+from __future__ import unicode_literals
+from builtins import object
 
 from ..repository.repository import Repository
 
@@ -24,7 +25,7 @@ from ..repository.repository import Repository
 # * and that it should be shut down before it is discarded/garbage collected.
 # * Forgetting the latter can result in loss of data (depending on the Repository
 # * implementation)!
-class Sail:
+class Sail(object):
     """
     Currently, this class is NOT USED!!!
     """

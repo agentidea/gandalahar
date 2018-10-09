@@ -2,63 +2,83 @@
 # -*- coding: utf-8 -*-
 # pylint: disable-msg=C0103 
 
-###############################################################################
-# Copyright (c) 2006-2015 Franz Inc.
-# All rights reserved. This program and the accompanying materials
-# are made available under the terms of the Eclipse Public License v1.0
-# which accompanies this distribution, and is available at
-# http://www.eclipse.org/legal/epl-v10.html
-###############################################################################
+################################################################################
+# Copyright (c) 2006-2017 Franz Inc.  
+# All rights reserved. This program and the accompanying materials are
+# made available under the terms of the MIT License which accompanies
+# this distribution, and is available at http://opensource.org/licenses/MIT
+################################################################################
 
 from __future__ import absolute_import
+from __future__ import division
+from __future__ import unicode_literals
 
+import math
+from decimal import Decimal
+
+from future.utils import python_2_unicode_compatible
+from past.utils import old_div
+
+from past.builtins import long, unicode
 from .value import Value, URI
 from ..exceptions import IllegalArgumentException
-from ..util import strings
 from ..vocabulary.xmlschema import XMLSchema
 from ..util import strings
 
 import datetime
 from collections import defaultdict
-from copy import copy
+
+# Needed to temporarily convert times to datetimes to do arithmetic.
+RANDOM_DAY = datetime.date(1984, 8, 26)
+
 
 def datatype_from_python(value, datatype):
     """
     If 'value' is not a string, convert it into one, and infer its
     datatype, unless 'datatype' is set (i.e., overrides it).
     """
-    if isinstance(value, str):
+    if isinstance(value, unicode):
         return value, datatype
+
+    if isinstance(value, bytes):
+        return unicode(value, "utf-8"), datatype
 
     ## careful: test for 'bool' must precede test for 'int':
     if isinstance(value, bool):
         return unicode(value).lower(), datatype or XMLSchema.BOOLEAN
 
-    if isinstance(value, long):
+    if isinstance(value, int):
         return unicode(value), datatype or XMLSchema.INTEGER
 
-    if isinstance(value, int):
+    if isinstance(value, long):
         return unicode(value), datatype or XMLSchema.LONG
 
     if isinstance(value, float):
         return unicode(value), datatype or XMLSchema.DOUBLE
 
     if isinstance(value, datetime.datetime):
+        # There is an ambiguity for times that occur twice due to
+        # DST switches, but that is a problem with Python's standard
+        # library and there is nothing we can do about it here.
         if value.utcoffset() is not None:
-            value = copy(value)
             value = value.replace(tzinfo=None) - value.utcoffset()
         str_value = value.isoformat() + 'Z'
         return str_value, datatype or XMLSchema.DATETIME
 
     if isinstance(value, datetime.time):
         if value.utcoffset() is not None:
-            value = copy(value)
-            value = value.replace(tzinfo=None) - value.utcoffset()
+            dt = datetime.datetime.combine(RANDOM_DAY, value)
+            dt -= value.utcoffset()
+            # Note: this will strip TZ
+            value = dt.time()
         str_value = value.isoformat() + 'Z'
         return str_value, datatype or XMLSchema.TIME
 
     if isinstance(value, datetime.date):
         return value.isoformat(), datatype or XMLSchema.DATE
+
+    if isinstance(value, Decimal):
+        return unicode(value), datatype or XMLSchema.DECIMAL
 
     return unicode(value), datatype
 
@@ -81,7 +101,9 @@ class Literal(Value):
     
     def setDatatype(self, datatype):
         """Sets the datatype of the value"""
-        if isinstance(datatype, str):
+        if isinstance(datatype, bytes):
+            datatype = unicode(datatype, "utf-8")
+        if isinstance(datatype, unicode):
             if datatype[0] == '<':
                 datatype = datatype[1:-1]
             datatype = XMLSchema.uristr2obj.get(datatype, None) or URI(datatype)
@@ -118,17 +140,9 @@ class Literal(Value):
         return self.label
 
     label = property(getLabel, setLabel)
-    
-    def __eq__(self, other):
-        if not isinstance(other, Literal):
-            return NotImplemented
 
-        return (self.label == other.label and 
-                self.datatype == other.datatype and
-                self.language == other.language)
-    
-    def __hash__(self):
-        return hash(self._label)
+    def get_cmp_key(self):
+        return self.label, self.datatype, self.language
     
     def intValue(self):
         """Convert to int"""
@@ -206,8 +220,8 @@ XSDToPython = defaultdict(lambda: Literal.getValue, [
                 (XMLSchema.INT.uri, Literal.intValue),
                 (XMLSchema.FLOAT.uri, Literal.floatValue), 
                 (XMLSchema.DOUBLE.uri, Literal.floatValue), 
-                (XMLSchema.LONG.uri, Literal.intValue),
-                (XMLSchema.INTEGER.uri, Literal.longValue),
+                (XMLSchema.LONG.uri, Literal.longValue),
+                (XMLSchema.INTEGER.uri, Literal.intValue),
                 (XMLSchema.BOOLEAN.uri, Literal.booleanValue),
                 (XMLSchema.DATETIME.uri, Literal.datetimeValue),
                 (XMLSchema.DATE.uri, Literal.dateValue),
@@ -258,6 +272,7 @@ class RangeLiteral(CompoundLiteral):
     def getUpperBound(self):
         return self.upperBound
 
+@python_2_unicode_compatible
 class GeoCoordinate(CompoundLiteral):
     """
     Define either a cartesian coordinate or a spherical coordinate.  For the
@@ -272,9 +287,12 @@ class GeoCoordinate(CompoundLiteral):
     def __str__(self):
         return "|COOR|(%i, %i)" % (self.xcoor, self.ycoor)
     
+
 class GeoSpatialRegion(CompoundLiteral):
     pass
 
+
+@python_2_unicode_compatible
 class GeoBox(GeoSpatialRegion):
     def __init__(self, xMin, xMax, yMin, yMax, unit=None, geoType=None):
         self.xMin = xMin
@@ -285,7 +303,9 @@ class GeoBox(GeoSpatialRegion):
         self.geoType = geoType
     
     def __str__(self): return "|Box|%s,%s %s,%s" % (self.xMin, self.xMax, self.yMin, self.yMax)
-        
+
+
+@python_2_unicode_compatible
 class GeoCircle(GeoSpatialRegion):
     def __init__(self, x, y, radius, unit=None, geoType=None):
         self.x = x
@@ -296,6 +316,8 @@ class GeoCircle(GeoSpatialRegion):
         
     def __str__(self): return "|Circle|%i,%i, radius=%i" % (self.x, self.y, self.radius)
 
+
+@python_2_unicode_compatible
 class GeoPolygon(GeoSpatialRegion):
     def __init__(self, vertices, uri=None, geoType=None):
         self.vertices = vertices
@@ -394,7 +416,7 @@ def _parse_iso(timestamp):
     if m.group('frac'):
         frac = m.group('frac')
         power = len(frac)
-        frac  = long(frac) / 10.0 ** power
+        frac  = old_div(int(frac), 10.0 ** power)
 
     if m.group('hour'):
         h = int(m.group('hour'))
@@ -408,12 +430,12 @@ def _parse_iso(timestamp):
     if frac != None:
         # ok, fractions of hour?
         if min == None:
-           frac, min = _math.modf(frac * 60.0)
+           frac, min = math.modf(frac * 60.0)
            min = int(min)
 
         # fractions of second?
         if s == None:
-           frac, s = _math.modf(frac * 60.0)
+           frac, s = math.modf(frac * 60.0)
            s = int(s)
 
         # and extract microseconds...
@@ -428,7 +450,7 @@ def _parse_iso(timestamp):
       
         # add optional minutes
         if tzm != None:
-            tzm = long(tzm)
+            tzm = int(tzm)
             offsetmins += tzm if offsetmins > 0 else -tzm
 
     # For our use here, we should not be given non-zero offsets

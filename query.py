@@ -31,7 +31,7 @@ def __getDatatype(stringType):
 
     raise Exception("Unhandled Type %s" % stringType)
 
-def getConn(repo='baroness', accessMode=Repository.OPEN):
+def getConn(repo='Barroness', accessMode=Repository.OPEN):
 
     server = AllegroGraphServer(AG_HOST, AG_PORT, AG_USER, AG_PASSWORD)
     catalog = server.openCatalog()
@@ -514,53 +514,53 @@ def getAttributes():
 
 def testA():
 
-    ret = addTripleUUU("scratch", "http://rdf.agentidea.com/name/GrantSteinfeld",
+    ret = addTripleUUU("Gandalahar", "http://rdf.agentidea.com/name/GrantSteinfeld",
                        "http://http://xmlns.com/foaf/spec/#term_knows",
                        "http://rdf.agentidea.com/name/LouiseSteinfeld")
 
     print ret
 
 
-    ret = addTripleUUL("scratch", "http://rdf.agentidea.com/name/GrantSteinfeld",
+    ret = addTripleUUL("Gandalahar", "http://rdf.agentidea.com/name/GrantSteinfeld",
                        "http://http://xmlns.com/foaf/spec/#term_knows",
                        "LouiseSteinfeld")
 
     print ret
 
-    ret = addTripleTypedObj("scratch", "http://rdf.agentidea.com/name/GrantSteinfeld",
+    ret = addTripleTypedObj("Gandalahar", "http://rdf.agentidea.com/name/GrantSteinfeld",
                        "http://xmlns.com/foaf/spec/#term_age",
                        42)
 
     print ret
 
-    ret = addTripleTypedObj("scratch", "http://rdf.agentidea.com/name/GrantSteinfeld",
+    ret = addTripleTypedObj("Gandalahar", "http://rdf.agentidea.com/name/GrantSteinfeld",
                        "http://xmlns.com/foaf/spec/#term_status",
                        "Ebullient and Pensive","string")
 
     print ret
 
 def testB():
-    ret = addTripleUULns('scratch',
+    ret = addTripleUULns('Gandalahar',
                          'rdf.agentidea.com',
                          'agents/GrantSteinfeld',
                          'spec/people/#term_nick',
                          'Thor')
 
     print ret
-    ret = addTripleUULns('scratch',
+    ret = addTripleUULns('Gandalahar',
                          'rdf.agentidea.com',
                          'agents/GrantSteinfeld',
                          'spec/people/#term_foaf',
                          'agents/RhadaPuppy')
 
     print ret
-    ret = addTripleUULns('scratch',
+    ret = addTripleUULns('Gandalahar',
                          'rdf.agentidea.com',
                          'agents/RhadaPuppy',
                          'spec/people/#term_foaf',
                          'agents/GrantSteinfeld')
     print ret
-    ret = addTripleUULns('scratch',
+    ret = addTripleUULns('Gandalahar',
                          'rdf.agentidea.com',
                          'agents/RhadaPuppy',
                          'spec/people/#term_nick',
@@ -569,7 +569,7 @@ def testB():
 
 
     print ret
-    ret = addTripleUULnsTyped('scratch',
+    ret = addTripleUULnsTyped('Gandalahar',
                          'rdf.agentidea.com',
                          'agents/RhadaPuppy',
                          'spec/people/#term_age',
@@ -577,7 +577,7 @@ def testB():
 
     print ret
 
-    ret = addTripleUULnsTyped('scratch',
+    ret = addTripleUULnsTyped('Gandalahar',
                          'rdf.agentidea.com',
                          'agents/GrantSteinfeld',
                          'spec/people/#term_age',
@@ -588,22 +588,22 @@ def testB():
 
 
 def testD():
-    bnode = addTripleBlankNode('scratch','http://rdf.agentidea.com/rel/A','foo','NumeroDuo')
-    addTripleBlankNode('scratch','http://rdf.agentidea.com/rel/B','boo',bnode)
-    addTripleBlankNode('scratch','http://rdf.agentidea.com/rel/N','noo',bnode)
+    bnode = addTripleBlankNode('Gandalahar','http://rdf.agentidea.com/rel/A','foo','NumeroDuo')
+    addTripleBlankNode('Gandalahar','http://rdf.agentidea.com/rel/B','boo',bnode)
+    addTripleBlankNode('Gandalahar','http://rdf.agentidea.com/rel/N','noo',bnode)
 
 
 
 def testE():
 
-    ret = existsTripleUULnsTyped('scratch',
+    ret = existsTripleUULnsTyped('Gandalahar',
                      'rdf.agentidea.com',
                      'agents/GrantSteinfeld',
                      'spec/people/#term_age',
                      48,datatype="INT")
 
     print ret
-    ret = addTripleUULnsTyped('scratch',
+    ret = addTripleUULnsTyped('Gandalahar',
                          'rdf.agentidea.com',
                          'agents/GrantSteinfeld',
                          'spec/people/#term_age',
@@ -612,7 +612,7 @@ def testE():
 
 
     print ret
-    ret = existsTripleUULnsTyped('scratch',
+    ret = existsTripleUULnsTyped('Gandalahar',
                      'rdf.agentidea.com',
                      'agents/GrantSteinfeld',
                      'spec/people/#term_age',
@@ -622,7 +622,7 @@ def testE():
 
 def testG():
 
-    ret = existsTripleUUnsTyped('scratch',
+    ret = existsTripleUUnsTyped('Gandalahar',
                      'rdf.agentidea.com',
                      'agents/GrantSteinfeld',
                      'spec/people/#term_age')
@@ -630,7 +630,7 @@ def testG():
 
 def testH():
 
-    ret = addTripleUULnsTyped('scratch',
+    ret = addTripleUULnsTyped('Gandalahar',
                          'rdf.agentidea.com',
                          'agents/GrantSteinfeld',
                          'spec/people/#term_age',
@@ -639,19 +639,19 @@ def testH():
 
 def testI():
 
-    ret = addTripleUUUns('scratch','rdf.agentidea.com','agents/GrantSteinfeld',
+    ret = addTripleUUUns('Gandalahar','rdf.agentidea.com','agents/GrantSteinfeld',
                          'spec/people/#term_barelyknows','agents/PaulSteinfeld')
 
     print ret
 
 def testJ():
 
-    ret = addTripleLUUns('scratch','rdf.agentidea.com','xyzABC',
+    ret = addTripleLUUns('Gandalahar','rdf.agentidea.com','xyzABC',
                          'spec/people/#term_src','http://www.agentidea.com')
 
     print ret
 
-    #ret = addTripleLULnsTyped('scratch','rdf.agentidea.com','xyzABC',
+    #ret = addTripleLULnsTyped('Gandalahar','rdf.agentidea.com','xyzABC',
     #                   'spec/people/#term_title','ghandilahar',"string")
 
     print ret
@@ -663,13 +663,6 @@ if __name__ == '__main__':
 
 
     testJ()
-    #SNAR()
-    #print getTriples('scratch')
+    #print getTriples('Gandalahar')
 
-    # print getAttribute()
-    # print getAttribute('HairColor')
-    # print getAttributes()
-    # rez = queryModel('bEBDD1E92x88', 'HairColor')
-    # for r in rez:
-    #     print r
 
