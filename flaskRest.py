@@ -230,6 +230,7 @@ class SpellMany(Resource):
 @humanNS.route('/model/<attribute>')
 class Model(Resource):
     def get(self, attribute):
+        if(attribute=='Text'): return {}
         return getAttribute(attribute)
 
     def post(self):
@@ -245,29 +246,27 @@ class Models(Resource):
         api.abort(403)
 
 
-@newsNS.route('/story/<o>')
+@newsNS.route('/src/<source>')
 class Story(Resource):
-    def get(self, o):
-        return getStory(o)
-
-    def post(self):
-        api.abort(403)
+    def get(self, source):
+        return Neo().get_nodes_by_src(source)
 
 @newsNS.route('/today/<daysBack>')
 class NewsSpan(Resource):
     def get(self, daysBack):
-        return Neo().get_nodes(daysBack)
+        return Neo().get_nodes_back(int(daysBack))
 
-    def post(self):
-        api.abort(403)
+
+@newsNS.route('/span/<start>/<end>')
+class NewsSpan(Resource):
+    def get(self, start, end):
+        return Neo().get_nodes_span(int(start),int(end))
 
 @newsNS.route('/breakingnews')
 class BreakingNews(Resource):
     def get(self):
         return Neo().get_nodes() 
 
-    def post(self):
-        api.abort(403)
 
 @debugNS.route('/tim/<code>')
 class Tim(Resource):
